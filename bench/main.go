@@ -7,7 +7,7 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"pointlander/compress"
+	"github.com/pointlander/compress"
 	"image"
 	/*"image/color"*/
 	_ "image/jpeg"
