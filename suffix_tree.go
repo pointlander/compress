@@ -4,8 +4,8 @@
 
 package compress
 
-import "fmt"
-import "time"
+//import "fmt"
+//import "time"
 
 type Edge struct {
 	first_index, last_index, start_node, end_node int
@@ -298,11 +298,11 @@ func BurrowsWheelerCoder(input <-chan []byte) (Coder8, <-chan int) {
 		}
 		copy(buffer, block)
 
-		start := time.Now()
+		//start := time.Now()
 		tree := BuildSuffixTree(buffer)
-		fmt.Printf("build: %v\n", time.Now().Sub(start).String())
+		//fmt.Printf("build: %v\n", time.Now().Sub(start).String())
 
-		start = time.Now()
+		//start = time.Now()
 		edges := tree.edges
 		histogram, end, written := [257]uint{}, len(buffer), 0
 
@@ -336,7 +336,7 @@ func BurrowsWheelerCoder(input <-chan []byte) (Coder8, <-chan int) {
 		}
 
 		walk(0, 0)
-		fmt.Printf("walk: %v\n", time.Now().Sub(start).String())
+		//fmt.Printf("walk: %v\n", time.Now().Sub(start).String())
 	}
 
 	go func() {

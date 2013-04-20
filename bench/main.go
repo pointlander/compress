@@ -146,6 +146,31 @@ func Compress(input []byte) {
 		fmt.Println("decompression worked")
 	}
 	fmt.Println(time.Now().Sub(start).String())
+
+	/* compress */
+	start, in = time.Now(), make(chan []byte, 1)
+	copy(data, input)
+	buffer.Reset()
+	in <- data
+	close(in)
+	compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontCoder().AdaptivePredictiveBitCoder().Code(buffer)
+	fmt.Println("\nadaptive predictive bit coder")
+	fmt.Printf("compressed=%v\n", buffer.Len())
+	fmt.Printf("ratio=%v\n", float64(buffer.Len()) / float64(len(input)))
+	fmt.Println(time.Now().Sub(start).String())
+
+	/* decompress */
+	start, in = time.Now(), make(chan []byte, 1)
+	uncompressed = make([]byte, len(input))
+	in <- uncompressed
+	close(in)
+	compress.BijectiveBurrowsWheelerDecoder(in).MoveToFrontDecoder().AdaptivePredictiveBitDecoder().Decode(buffer)
+	if bytes.Compare(input, uncompressed) != 0 {
+		fmt.Println("decompression didn't work")
+	} else {
+		fmt.Println("decompression worked")
+	}
+	fmt.Println(time.Now().Sub(start).String())
 }
 
 func Compress32(input []byte) {
