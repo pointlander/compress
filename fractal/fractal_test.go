@@ -26,6 +26,71 @@ import (
 	"testing"
 )
 
+func TestDCT(t *testing.T) {
+	in := [8][8]uint8 {
+		{255, 0, 255, 0, 255, 0, 255, 0},
+		{0, 255, 0, 255, 0, 255, 0, 255},
+		{255, 0, 255, 0, 255, 0, 255, 0},
+		{0, 255, 0, 255, 0, 255, 0, 255},
+		{255, 0, 255, 0, 255, 0, 255, 0},
+		{0, 255, 0, 255, 0, 255, 0, 255},
+		{255, 0, 255, 0, 255, 0, 255, 0},
+		{0, 255, 0, 255, 0, 255, 0, 255},
+	}
+	dct, idct := [8][8]int {}, [8][8]int {}
+	ForwardDCT(&in, &dct)
+	InverseDCT(&dct, &idct)
+	for i := 0; i < N; i++ {
+		for j := 0; j < N; j++ {
+			if int(in[i][j]) != idct[i][j] {
+				t.Errorf("input does not equal idct(dct(input))")
+			}
+		}
+	}
+}
+
+func TestImageDCT(t *testing.T) {
+	file, err := os.Open("images/lenna.png")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	input, _, err := image.Decode(file)
+	if err != nil {
+		log.Fatal(err)
+	}
+	file.Close()
+
+	input = Gray(input)
+	output := DCTCoder(input)
+	output = DCTMap(output)
+
+	file, err = os.Create("lenna_dct.png")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = png.Encode(file, output)
+	if err != nil {
+		log.Fatal(err)
+	}
+	file.Close()
+
+	idct := DCTIMap(output)
+	idct = DCTDecoder(idct)
+
+	file, err = os.Create("lenna_idct.png")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = png.Encode(file, idct)
+	if err != nil {
+		log.Fatal(err)
+	}
+	file.Close()
+}
+
 func TestFractal(t *testing.T) {
 	runtime.GOMAXPROCS(64)
 
@@ -48,10 +113,12 @@ func TestFractal(t *testing.T) {
 	}
 	file.Close()
 
-	width, height, scale := input.Bounds().Max.X, input.Bounds().Max.Y, 4
+	width, height, scale := input.Bounds().Max.X, input.Bounds().Max.Y, 2
 	width, height = width/scale, height/scale
 	input = resize.Resize(uint(width), uint(height), input, resize.NearestNeighbor)
-	FractalCoder(input, 2, fcpBuffer)
+
+	gray := Gray(input)
+	FractalCoder(gray, 2, fcpBuffer)
 	fcp := fcpBuffer.Bytes()
 	fcpBufferCopy := bytes.NewBuffer(fcp)
 
@@ -201,7 +268,7 @@ func TestFractal(t *testing.T) {
 
 	jpg_test := func() (int, string) {
 		buffer := &bytes.Buffer{}
-		jpeg.Encode(buffer, input, nil)
+		jpeg.Encode(buffer, gray, nil)
 		return buffer.Len(), "image/jpeg"
 	}
 
