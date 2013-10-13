@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	GAMMA = 0.1
+	GAMMA = 0.75
 	DECODE_ITERATIONS = 16
 )
 
@@ -312,10 +312,10 @@ func FractalDecoder(in io.Reader, _panelSize int) image.Image {
 
 		for j, d := range panels {
 			code := codes[j]
-			x, y := int(uint64(_panelSize)*uint64(code.x)/(2*uint64(panelSize))),
-				int(uint64(_panelSize)*uint64(code.y)/(2*uint64(panelSize)))
-			//x, y := int(uint32(code.x)/panelSize),
-			//	int(uint32(code.y)/panelSize)
+			//x, y := int(uint64(_panelSize)*uint64(code.x)/(2*uint64(panelSize))),
+			//	int(uint64(_panelSize)*uint64(code.y)/(2*uint64(panelSize)))
+			x, y := int(uint32(code.x)/panelSize),
+				int(uint32(code.y)/panelSize)
 			if x >= reference.xPanels {
 				x = reference.xPanels - 1
 			}
