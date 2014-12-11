@@ -63,7 +63,8 @@ func TestImageDCT(t *testing.T) {
 
 	input = Gray(input)
 	output := DCTCoder(input)
-	output = DCTMap(output)
+	//output = DCTMap(output)
+	//output = Paeth8(output)
 
 	file, err = os.Create("lenna_dct.png")
 	if err != nil {
@@ -76,8 +77,17 @@ func TestImageDCT(t *testing.T) {
 	}
 	file.Close()
 
-	idct := DCTIMap(output)
-	idct = DCTDecoder(idct)
+	data := make([]byte, len(output.Pix))
+	copy(data, output.Pix)
+	in, compressed := make(chan []byte, 1), &bytes.Buffer{}
+	in <- data
+	close(in)
+	compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontRunLengthCoder().AdaptiveCoder().Code(compressed)
+	fmt.Printf("%.3f%% %7vb\n", 100 * float64(compressed.Len())/float64(len(output.Pix)), compressed.Len())
+
+	//output = IPaeth8(output)
+	//idct := DCTIMap(output)
+	idct := DCTDecoder(output)
 
 	file, err = os.Create("lenna_idct.png")
 	if err != nil {
@@ -113,12 +123,12 @@ func TestFractal(t *testing.T) {
 	}
 	file.Close()
 
-	width, height, scale := input.Bounds().Max.X, input.Bounds().Max.Y, 2
+	width, height, scale := input.Bounds().Max.X, input.Bounds().Max.Y, 1
 	width, height = width/scale, height/scale
 	input = resize.Resize(uint(width), uint(height), input, resize.NearestNeighbor)
 
 	gray := Gray(input)
-	FractalCoder(gray, 2, fcpBuffer)
+	FractalCoder(gray, 4, fcpBuffer)
 	fcp := fcpBuffer.Bytes()
 	fcpBufferCopy := bytes.NewBuffer(fcp)
 
@@ -154,7 +164,7 @@ func TestFractal(t *testing.T) {
 	}
 	file.Close()
 
-	decoded = FractalDecoder(fcpBufferCopy, 4)
+	decoded = FractalDecoder(fcpBufferCopy, 8)
 
 	file, err = os.Create(name + "_decodedx2.png")
 	if err != nil {

@@ -193,3 +193,91 @@ func DCTIMap(input image.Image) *image.Gray {
 	}
 	return output
 }
+
+func Paeth8(input image.Image) *image.Gray {
+	bounds := input.Bounds()
+	output := image.NewGray(bounds)
+	width, height := bounds.Max.X, bounds.Max.Y
+	abs := func(x int32) int32 {
+		if x < 0 {
+			return -x
+		} else {
+			return x
+		}
+	}
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			var a, b, c int32
+			if x > 0 {
+				z, _, _, _ := input.At(x - 1, y).RGBA()
+				a = int32(z >> 8)
+				if y > 0 {
+					z, _, _, _ = input.At(x - 1, y - 1).RGBA()
+					c = int32(z >> 8)
+				}
+			}
+			if y > 0 {
+				z, _, _, _ := input.At(x, y - 1).RGBA()
+				b = int32(z >> 8)
+			}
+			p := a + b - c
+			pa, pb, pc := abs(p - a), abs(p - b), abs(p - c)
+			if pa <= pb && pa <= pc {
+				p = a
+			} else if pb <= pc {
+				p = b
+			} else {
+				p = c
+			}
+
+			z, _, _, _ := input.At(x, y).RGBA()
+			d := int32(z >> 8)
+			output.SetGray(x, y, color.Gray {uint8((d-p)%256)})
+		}
+	}
+	return output
+}
+
+func IPaeth8(input image.Image) *image.Gray {
+	bounds := input.Bounds()
+	output := image.NewGray(bounds)
+	width, height := bounds.Max.X, bounds.Max.Y
+	abs := func(x int32) int32 {
+		if x < 0 {
+			return -x
+		} else {
+			return x
+		}
+	}
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			var a, b, c int32
+			if x > 0 {
+				z, _, _, _ := output.At(x - 1, y).RGBA()
+				a = int32(z >> 8)
+				if y > 0 {
+					z, _, _, _ = output.At(x - 1, y - 1).RGBA()
+					c = int32(z >> 8)
+				}
+			}
+			if y > 0 {
+				z, _, _, _ := output.At(x, y - 1).RGBA()
+				b = int32(z >> 8)
+			}
+			p := a + b - c
+			pa, pb, pc := abs(p - a), abs(p - b), abs(p - c)
+			if pa <= pb && pa <= pc {
+				p = a
+			} else if pb <= pc {
+				p = b
+			} else {
+				p = c
+			}
+
+			z, _, _, _ := input.At(x, y).RGBA()
+			d := int32(z >> 8)
+			output.SetGray(x, y, color.Gray {uint8((d + p) % 256)})
+		}
+	}
+	return output
+}
