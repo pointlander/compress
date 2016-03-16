@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-var TESTS = [...]string {
+var TESTS = [...]string{
 	"SIX.MIXED.PIXIES.SIFT.SIXTY.PIXIE.DUST.BOXES",
 	"output[j], j, k, minor[k] = s[k], j - 1, major[s[k]] + minor[k], -1",
 	"now is the time for the truly nice people to come to the party",
@@ -56,7 +56,7 @@ func TestBurrowsWheeler(t *testing.T) {
 			index++
 		}
 		s := <-sentinel
-		for b, c := out_buffer[s], s + 1; c < len(out_buffer); c++ {
+		for b, c := out_buffer[s], s+1; c < len(out_buffer); c++ {
 			out_buffer[c], b = b, out_buffer[c]
 		}
 
@@ -72,6 +72,7 @@ func TestBurrowsWheeler(t *testing.T) {
 }
 
 const repeated = 10000
+
 func TestBijectiveBurrowsWheeler(t *testing.T) {
 	input, output := make(chan []byte), make(chan []byte, 2)
 	coder, decoder := BijectiveBurrowsWheelerCoder(input), BijectiveBurrowsWheelerDecoder(output)
@@ -131,16 +132,16 @@ func TestMoveToFront(t *testing.T) {
 
 func TestCode16(t *testing.T) {
 	test := []byte("GLIB BATES\x00")
-	var table = [256]Symbol {'B': {11, 0, 1},
-                                 'I': {11, 1, 2},
-                                 'L': {11, 2, 4},
-                                 ' ': {11, 4, 5},
-                                 'G': {11, 5, 6},
-                                 'A': {11, 6, 7},
-                                 'T': {11, 7, 8},
-                                 'E': {11, 8, 9},
-                                 'S': {11, 9, 10},
-                                 '\x00': {11, 10, 11}}
+	var table = [256]Symbol{'B': {11, 0, 1},
+		'I':    {11, 1, 2},
+		'L':    {11, 2, 4},
+		' ':    {11, 4, 5},
+		'G':    {11, 5, 6},
+		'A':    {11, 6, 7},
+		'T':    {11, 7, 8},
+		'E':    {11, 8, 9},
+		'S':    {11, 9, 10},
+		'\x00': {11, 10, 11}}
 	in, buffer := make(chan []Symbol), &bytes.Buffer{}
 	go func() {
 		input := make([]Symbol, len(test))
@@ -159,18 +160,17 @@ func TestCode16(t *testing.T) {
 	lookup := func(code uint16) Symbol {
 		for i, symbol := range table {
 			if code >= symbol.Low && code < symbol.High {
-				uncompressed[j], j = byte(i), j + 1
+				uncompressed[j], j = byte(i), j+1
 				if i == 0 {
 					return Symbol{}
 				} else {
 					return symbol
 				}
-				break
 			}
 		}
 		return Symbol{}
 	}
-	Model{Scale:11, Output:lookup}.Decode(buffer)
+	Model{Scale: 11, Output: lookup}.Decode(buffer)
 	if bytes.Compare(test, uncompressed) != 0 {
 		t.Errorf("arithmetic decoding failed")
 	}
@@ -178,16 +178,16 @@ func TestCode16(t *testing.T) {
 
 func TestCode32(t *testing.T) {
 	test := []byte("GLIB BATES\x00")
-	var table = [256]Symbol32 {'B': {11, 0, 1},
-                                   'I': {11, 1, 2},
-                                   'L': {11, 2, 4},
-                                   ' ': {11, 4, 5},
-                                   'G': {11, 5, 6},
-                                   'A': {11, 6, 7},
-                                   'T': {11, 7, 8},
-                                   'E': {11, 8, 9},
-                                   'S': {11, 9, 10},
-                                   '\x00': {11, 10, 11}}
+	var table = [256]Symbol32{'B': {11, 0, 1},
+		'I':    {11, 1, 2},
+		'L':    {11, 2, 4},
+		' ':    {11, 4, 5},
+		'G':    {11, 5, 6},
+		'A':    {11, 6, 7},
+		'T':    {11, 7, 8},
+		'E':    {11, 8, 9},
+		'S':    {11, 9, 10},
+		'\x00': {11, 10, 11}}
 
 	in, buffer := make(chan []Symbol32), &bytes.Buffer{}
 	go func() {
@@ -207,18 +207,17 @@ func TestCode32(t *testing.T) {
 	lookup := func(code uint32) Symbol32 {
 		for i, symbol := range table {
 			if code >= symbol.Low && code < symbol.High {
-				uncompressed[j], j = byte(i), j + 1
+				uncompressed[j], j = byte(i), j+1
 				if i == 0 {
 					return Symbol32{}
 				} else {
 					return symbol
 				}
-				break
 			}
 		}
 		return Symbol32{}
 	}
-	Model32{Scale:11, Output:lookup}.Decode(buffer)
+	Model32{Scale: 11, Output: lookup}.Decode(buffer)
 	if bytes.Compare(test, uncompressed) != 0 {
 		t.Errorf("arithmetic decoding failed")
 	}

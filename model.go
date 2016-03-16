@@ -22,11 +22,11 @@ func (coder Coder16) AdaptiveCoder() Model {
 					low += count
 				}
 
-				current[index], index = Symbol{Scale:scale, Low:low, High:low + table[s]}, index + 1
+				current[index], index = Symbol{Scale: scale, Low: low, High: low + table[s]}, index+1
 				if index == BUFFER_SIZE {
 					out <- current
 					next := offset + BUFFER_SIZE
-					current, offset, index = buffer[offset:next], next & BUFFER_POOL_SIZE_MASK, 0
+					current, offset, index = buffer[offset:next], next&BUFFER_POOL_SIZE_MASK, 0
 				}
 
 				scale++
@@ -35,9 +35,9 @@ func (coder Coder16) AdaptiveCoder() Model {
 					scale = 0
 					for i, count := range table {
 						if count >>= 1; count == 0 {
-							table[i], scale = 1, scale + 1
+							table[i], scale = 1, scale+1
 						} else {
-							table[i], scale = count, scale + count
+							table[i], scale = count, scale+count
 						}
 					}
 				}
@@ -72,11 +72,11 @@ func (coder Coder16) AdaptivePredictiveCoder() Model {
 					low += count
 				}
 
-				current[index], index = Symbol{Scale:scale[context], Low:low, High:low + table[context][s]}, index + 1
+				current[index], index = Symbol{Scale: scale[context], Low: low, High: low + table[context][s]}, index+1
 				if index == BUFFER_SIZE {
 					out <- current
 					next := offset + BUFFER_SIZE
-					current, offset, index = buffer[offset:next], next & BUFFER_POOL_SIZE_MASK, 0
+					current, offset, index = buffer[offset:next], next&BUFFER_POOL_SIZE_MASK, 0
 				}
 
 				scale[context]++
@@ -85,9 +85,9 @@ func (coder Coder16) AdaptivePredictiveCoder() Model {
 					scale[context] = 0
 					for i, count := range table[context] {
 						if count >>= 1; count == 0 {
-							table[context][i], scale[context] = 1, scale[context] + 1
+							table[context][i], scale[context] = 1, scale[context]+1
 						} else {
-							table[context][i], scale[context] = count, scale[context] + count
+							table[context][i], scale[context] = count, scale[context]+count
 						}
 					}
 				}
@@ -118,20 +118,20 @@ func (coder Coder16) AdaptivePredictiveBitCoder() Model {
 			highest++
 		}
 
-		current, offset, index, mask := buffer[0:BUFFER_SIZE], BUFFER_SIZE, 0, uint16(1) << (highest - 1)
+		current, offset, index, mask := buffer[0:BUFFER_SIZE], BUFFER_SIZE, 0, uint16(1)<<(highest-1)
 		for input := range coder.Input {
 			for _, s := range input {
 				for bit := mask; bit > 0; bit >>= 1 {
-					b, low, high, scale := uint16(0), uint16(0), table[context][0], table[context][0] + table[context][1]
-					if bit & s != 0 {
+					b, low, high, scale := uint16(0), uint16(0), table[context][0], table[context][0]+table[context][1]
+					if bit&s != 0 {
 						b, low, high = 1, high, scale
 					}
 
-					current[index], index = Symbol{Scale:scale, Low:low, High:high}, index + 1
+					current[index], index = Symbol{Scale: scale, Low: low, High: high}, index+1
 					if index == BUFFER_SIZE {
 						out <- current
 						next := offset + BUFFER_SIZE
-						current, offset, index = buffer[offset:next], next & BUFFER_POOL_SIZE_MASK, 0
+						current, offset, index = buffer[offset:next], next&BUFFER_POOL_SIZE_MASK, 0
 					}
 
 					table[context][b]++
@@ -146,7 +146,7 @@ func (coder Coder16) AdaptivePredictiveBitCoder() Model {
 						}
 					}
 
-					context = b|(context << 1)
+					context = b | (context << 1)
 				}
 			}
 		}
@@ -169,7 +169,7 @@ func (decoder Coder16) AdaptiveDecoder() Model {
 		low, high, done := uint16(0), uint16(0), false
 		for s, count := range table {
 			if high += count; code < high {
-				low, done, scale, table[s] = high - count, decoder.Output(uint16(s)), scale + 1, table[s] + 1
+				low, done, scale, table[s] = high-count, decoder.Output(uint16(s)), scale+1, table[s]+1
 				break
 			}
 		}
@@ -181,19 +181,18 @@ func (decoder Coder16) AdaptiveDecoder() Model {
 				scale = 0
 				for i, count := range table {
 					if count >>= 1; count == 0 {
-						table[i], scale = 1, scale + 1
+						table[i], scale = 1, scale+1
 					} else {
-						table[i], scale = count, scale + count
+						table[i], scale = count, scale+count
 					}
 				}
 			}
 
-			return Symbol{Scale:scale, Low:low, High:high}
+			return Symbol{Scale: scale, Low: low, High: high}
 		}
-		return Symbol{}
 	}
 
-	return Model{Scale:uint32(scale), Output:lookup}
+	return Model{Scale: uint32(scale), Output: lookup}
 }
 
 func (decoder Coder16) AdaptivePredictiveDecoder() Model {
@@ -211,7 +210,7 @@ func (decoder Coder16) AdaptivePredictiveDecoder() Model {
 		for s, count := range table[context] {
 			if high += count; code < high {
 				next = uint16(s)
-				low, done, scale[context], table[context][s] = high - count, decoder.Output(next), scale[context] + 1, table[context][s] + 1
+				low, done, scale[context], table[context][s] = high-count, decoder.Output(next), scale[context]+1, table[context][s]+1
 				break
 			}
 		}
@@ -223,20 +222,19 @@ func (decoder Coder16) AdaptivePredictiveDecoder() Model {
 				scale[context] = 0
 				for i, count := range table[context] {
 					if count >>= 1; count == 0 {
-						table[context][i], scale[context] = 1, scale[context] + 1
+						table[context][i], scale[context] = 1, scale[context]+1
 					} else {
-						table[context][i], scale[context] = count, scale[context] + count
+						table[context][i], scale[context] = count, scale[context]+count
 					}
 				}
 			}
 
 			context = next
-			return Symbol{Scale:scale[context], Low:low, High:high}
+			return Symbol{Scale: scale[context], Low: low, High: high}
 		}
-		return Symbol{}
 	}
 
-	return Model{Scale:uint32(decoder.Alphabit), Output:lookup}
+	return Model{Scale: uint32(decoder.Alphabit), Output: lookup}
 }
 
 func (decoder Coder16) AdaptivePredictiveBitDecoder() Model {
@@ -254,11 +252,11 @@ func (decoder Coder16) AdaptivePredictiveBitDecoder() Model {
 	bit, bits := mask, uint16(0)
 
 	lookup := func(code uint16) Symbol {
-		scale, low, high, b := table[context][0] + table[context][1], uint16(0), uint16(0), uint16(0)
+		scale, low, high, b := table[context][0]+table[context][1], uint16(0), uint16(0), uint16(0)
 		if code < table[context][0] {
-			high, bit = table[context][0], bit >> 1
+			high, bit = table[context][0], bit>>1
 		} else {
-			low, high, bits, bit, b = table[context][0], scale, bits | bit, bit >> 1, 1
+			low, high, bits, bit, b = table[context][0], scale, bits|bit, bit>>1, 1
 		}
 
 		table[context][b]++
@@ -272,7 +270,7 @@ func (decoder Coder16) AdaptivePredictiveBitDecoder() Model {
 				table[context][1] = 1
 			}
 		}
-		context = b|(context << 1)
+		context = b | (context << 1)
 
 		if bit == 0 {
 			if decoder.Output(bits) {
@@ -281,10 +279,10 @@ func (decoder Coder16) AdaptivePredictiveBitDecoder() Model {
 			bits, bit = 0, mask
 		}
 
-		return Symbol{Scale:table[context][0] + table[context][1], Low:low, High:high}
+		return Symbol{Scale: table[context][0] + table[context][1], Low: low, High: high}
 	}
 
-	return Model{Scale:uint32(2), Output:lookup}
+	return Model{Scale: uint32(2), Output: lookup}
 }
 
 func (coder Coder16) AdaptiveCoder32() Model32 {
@@ -304,11 +302,11 @@ func (coder Coder16) AdaptiveCoder32() Model32 {
 					low += count
 				}
 
-				current[index], index = Symbol32{Scale:scale, Low:low, High:low + table[s]}, index + 1
+				current[index], index = Symbol32{Scale: scale, Low: low, High: low + table[s]}, index+1
 				if index == BUFFER_SIZE {
 					out <- current
 					next := offset + BUFFER_SIZE
-					current, offset, index = buffer[offset:next], next & BUFFER_POOL_SIZE_MASK, 0
+					current, offset, index = buffer[offset:next], next&BUFFER_POOL_SIZE_MASK, 0
 				}
 
 				scale++
@@ -317,9 +315,9 @@ func (coder Coder16) AdaptiveCoder32() Model32 {
 					scale = 0
 					for i, count := range table {
 						if count >>= 1; count == 0 {
-							table[i], scale = 1, scale + 1
+							table[i], scale = 1, scale+1
 						} else {
-							table[i], scale = count, scale + count
+							table[i], scale = count, scale+count
 						}
 					}
 				}
@@ -354,11 +352,11 @@ func (coder Coder16) AdaptivePredictiveCoder32() Model32 {
 					low += count
 				}
 
-				current[index], index = Symbol32{Scale:scale[context], Low:low, High:low + table[context][s]}, index + 1
+				current[index], index = Symbol32{Scale: scale[context], Low: low, High: low + table[context][s]}, index+1
 				if index == BUFFER_SIZE {
 					out <- current
 					next := offset + BUFFER_SIZE
-					current, offset, index = buffer[offset:next], next & BUFFER_POOL_SIZE_MASK, 0
+					current, offset, index = buffer[offset:next], next&BUFFER_POOL_SIZE_MASK, 0
 				}
 
 				scale[context]++
@@ -367,9 +365,9 @@ func (coder Coder16) AdaptivePredictiveCoder32() Model32 {
 					scale[context] = 0
 					for i, count := range table[context] {
 						if count >>= 1; count == 0 {
-							table[context][i], scale[context] = 1, scale[context] + 1
+							table[context][i], scale[context] = 1, scale[context]+1
 						} else {
-							table[context][i], scale[context] = count, scale[context] + count
+							table[context][i], scale[context] = count, scale[context]+count
 						}
 					}
 				}
@@ -394,7 +392,7 @@ func (decoder Coder16) AdaptiveDecoder32() Model32 {
 		low, high, done := uint32(0), uint32(0), false
 		for s, count := range table {
 			if high += count; code < high {
-				low, done, scale, table[s] = high - count, decoder.Output(uint16(s)), scale + 1, table[s] + 1
+				low, done, scale, table[s] = high-count, decoder.Output(uint16(s)), scale+1, table[s]+1
 				break
 			}
 		}
@@ -406,19 +404,18 @@ func (decoder Coder16) AdaptiveDecoder32() Model32 {
 				scale = 0
 				for i, count := range table {
 					if count >>= 1; count == 0 {
-						table[i], scale = 1, scale + 1
+						table[i], scale = 1, scale+1
 					} else {
-						table[i], scale = count, scale + count
+						table[i], scale = count, scale+count
 					}
 				}
 			}
 
-			return Symbol32{Scale:scale, Low:low, High:high}
+			return Symbol32{Scale: scale, Low: low, High: high}
 		}
-		return Symbol32{}
 	}
 
-	return Model32{Scale:uint64(decoder.Alphabit), Output:lookup}
+	return Model32{Scale: uint64(decoder.Alphabit), Output: lookup}
 }
 
 func (decoder Coder16) AdaptivePredictiveDecoder32() Model32 {
@@ -436,7 +433,7 @@ func (decoder Coder16) AdaptivePredictiveDecoder32() Model32 {
 		for s, count := range table[context] {
 			if high += count; code < high {
 				next = uint16(s)
-				low, done, scale[context], table[context][s] = high - count, decoder.Output(next), scale[context] + 1, table[context][s] + 1
+				low, done, scale[context], table[context][s] = high-count, decoder.Output(next), scale[context]+1, table[context][s]+1
 				break
 			}
 		}
@@ -448,19 +445,18 @@ func (decoder Coder16) AdaptivePredictiveDecoder32() Model32 {
 				scale[context] = 0
 				for i, count := range table[context] {
 					if count >>= 1; count == 0 {
-						table[context][i], scale[context] = 1, scale[context] + 1
+						table[context][i], scale[context] = 1, scale[context]+1
 					} else {
-						table[context][i], scale[context] = count, scale[context] + count
+						table[context][i], scale[context] = count, scale[context]+count
 					}
 				}
 			}
 
 			context = next
-			return Symbol32{Scale:scale[context], Low:low, High:high}
+			return Symbol32{Scale: scale[context], Low: low, High: high}
 		}
 
-		return Symbol32{}
 	}
 
-	return Model32{Scale:uint64(decoder.Alphabit), Output:lookup}
+	return Model32{Scale: uint64(decoder.Alphabit), Output: lookup}
 }
