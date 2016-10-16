@@ -27,6 +27,8 @@ import (
 	"github.com/pointlander/compress"
 )
 
+const testImage = "../bench/310px-Tesla_colorado_adjusted.jpg"
+
 func TestDCT(t *testing.T) {
 	in := [8][8]uint8{
 		{255, 0, 255, 0, 255, 0, 255, 0},
@@ -51,7 +53,7 @@ func TestDCT(t *testing.T) {
 }
 
 func TestImageDCT(t *testing.T) {
-	file, err := os.Open("images/lenna.png")
+	file, err := os.Open(testImage)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -67,7 +69,7 @@ func TestImageDCT(t *testing.T) {
 	//output = DCTMap(output)
 	//output = Paeth8(output)
 
-	file, err = os.Create("lenna_dct.png")
+	file, err = os.Create("tesla_dct.png")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -90,7 +92,7 @@ func TestImageDCT(t *testing.T) {
 	//idct := DCTIMap(output)
 	idct := DCTDecoder(output)
 
-	file, err = os.Create("lenna_idct.png")
+	file, err = os.Create("tesla_idct.png")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -106,7 +108,7 @@ func TestFractal(t *testing.T) {
 	runtime.GOMAXPROCS(64)
 
 	fcpBuffer := &bytes.Buffer{}
-	file, err := os.Open("images/lenna.png")
+	file, err := os.Open(testImage)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -126,6 +128,11 @@ func TestFractal(t *testing.T) {
 
 	width, height, scale := input.Bounds().Max.X, input.Bounds().Max.Y, 1
 	width, height = width/scale, height/scale
+	if width < height {
+		height = width
+	} else if height < width {
+		width = height
+	}
 	input = resize.Resize(uint(width), uint(height), input, resize.NearestNeighbor)
 
 	gray := Gray(input)
