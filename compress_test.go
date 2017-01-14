@@ -222,3 +222,14 @@ func TestCode32(t *testing.T) {
 		t.Errorf("arithmetic decoding failed")
 	}
 }
+
+func TestMark1(t *testing.T) {
+	for _, v := range TESTS {
+		output, buffer := make([]byte, len(v)), &bytes.Buffer{}
+		Mark1Compress16([]byte(v), buffer)
+		Mark1Decompress16(buffer, output)
+		if string(output) != v {
+			t.Errorf("should be '%v'; got '%v'", v, strconv.QuoteToASCII(string(output)))
+		}
+	}
+}
