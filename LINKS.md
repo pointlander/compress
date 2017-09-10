@@ -10,3 +10,7 @@ http://webppl.org/
 http://pages.cs.wisc.edu/~bsettles/ibs08/lectures/03-sequencemodels.pdf
 
 https://ro-che.info/articles/2017-08-20-understanding-ans  
+
+https://github.com/dsnet/compress  
+https://fgiesen.wordpress.com/2015/05/26/models-for-adaptive-arithmetic-coding/  
+

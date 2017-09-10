@@ -7,7 +7,6 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"github.com/pointlander/compress"
 	"image"
 	/*"image/color"*/
 	_ "image/jpeg"
@@ -19,9 +18,14 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/pointlander/compress"
 )
 
-type Symbols8 [256]struct {uint8; uint64}
+type Symbols8 [256]struct {
+	uint8
+	uint64
+}
 
 func (s *Symbols8) Count(data []byte) {
 	for _, d := range data {
@@ -64,54 +68,141 @@ func Entropy(input []byte) float64 {
 	entropy, length := float64(0), float64(len(input))
 	for _, v := range histogram {
 		if v != 0 {
-			entropy += float64(v) * math.Log2(float64(v) / length) / length
+			entropy += float64(v) * math.Log2(float64(v)/length) / length
 		}
 	}
 	return -entropy
 }
 
+type Configuration struct {
+	Name       string
+	Compress   func(in chan []byte, buffer *bytes.Buffer)
+	Uncompress func(in chan []byte, buffer *bytes.Buffer)
+}
+
+var configurations = [...]Configuration{
+	{
+		Name: "adaptive coder",
+		Compress: func(in chan []byte, buffer *bytes.Buffer) {
+			compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontRunLengthCoder().AdaptiveCoder().Code(buffer)
+		},
+		Uncompress: func(in chan []byte, buffer *bytes.Buffer) {
+			compress.BijectiveBurrowsWheelerDecoder(in).MoveToFrontRunLengthDecoder().AdaptiveDecoder().Decode(buffer)
+		},
+	},
+	{
+		Name: "adaptive predictive coder",
+		Compress: func(in chan []byte, buffer *bytes.Buffer) {
+			compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontRunLengthCoder().AdaptivePredictiveCoder().Code(buffer)
+		},
+		Uncompress: func(in chan []byte, buffer *bytes.Buffer) {
+			compress.BijectiveBurrowsWheelerDecoder(in).MoveToFrontRunLengthDecoder().AdaptivePredictiveDecoder().Decode(buffer)
+		},
+	},
+	{
+		Name: "adaptive bit coder",
+		Compress: func(in chan []byte, buffer *bytes.Buffer) {
+			compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontCoder().AdaptiveBitCoder().Code(buffer)
+		},
+		Uncompress: func(in chan []byte, buffer *bytes.Buffer) {
+			compress.BijectiveBurrowsWheelerDecoder(in).MoveToFrontDecoder().AdaptiveBitDecoder().Decode(buffer)
+		},
+	},
+	{
+		Name: "adaptive predictive bit coder",
+		Compress: func(in chan []byte, buffer *bytes.Buffer) {
+			compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontCoder().AdaptivePredictiveBitCoder().Code(buffer)
+		},
+		Uncompress: func(in chan []byte, buffer *bytes.Buffer) {
+			compress.BijectiveBurrowsWheelerDecoder(in).MoveToFrontDecoder().AdaptivePredictiveBitDecoder().Decode(buffer)
+		},
+	},
+	{
+		Name: "filtered adaptive bit coder",
+		Compress: func(in chan []byte, buffer *bytes.Buffer) {
+			compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontCoder().FilteredAdaptiveBitCoder().Code(buffer)
+		},
+		Uncompress: func(in chan []byte, buffer *bytes.Buffer) {
+			compress.BijectiveBurrowsWheelerDecoder(in).MoveToFrontDecoder().FilteredAdaptiveBitDecoder().Decode(buffer)
+		},
+	},
+	{
+		Name: "filtered adaptive predictive bit coder",
+		Compress: func(in chan []byte, buffer *bytes.Buffer) {
+			compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontCoder().FilteredAdaptivePredictiveBitCoder().Code(buffer)
+		},
+		Uncompress: func(in chan []byte, buffer *bytes.Buffer) {
+			compress.BijectiveBurrowsWheelerDecoder(in).MoveToFrontDecoder().FilteredAdaptivePredictiveBitDecoder().Decode(buffer)
+		},
+	},
+}
+
+var configurations32 = [...]Configuration{
+	{
+		Name: "adaptive coder 32",
+		Compress: func(in chan []byte, buffer *bytes.Buffer) {
+			compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontRunLengthCoder().AdaptiveCoder32().Code(buffer)
+		},
+		Uncompress: func(in chan []byte, buffer *bytes.Buffer) {
+			compress.BijectiveBurrowsWheelerDecoder(in).MoveToFrontRunLengthDecoder().AdaptiveDecoder32().Decode(buffer)
+		},
+	},
+	{
+		Name: "adaptive predictive coder 32",
+		Compress: func(in chan []byte, buffer *bytes.Buffer) {
+			compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontRunLengthCoder().AdaptivePredictiveCoder32().Code(buffer)
+		},
+		Uncompress: func(in chan []byte, buffer *bytes.Buffer) {
+			compress.BijectiveBurrowsWheelerDecoder(in).MoveToFrontRunLengthDecoder().AdaptivePredictiveDecoder32().Decode(buffer)
+		},
+	},
+}
+
 func Compress(input []byte) {
+	for c := range configurations {
+		/* compress */
+		start, in, data := time.Now(), make(chan []byte, 1), make([]byte, len(input))
+		copy(data, input)
+		buffer := &bytes.Buffer{}
+		in <- data
+		close(in)
+		configurations[c].Compress(in, buffer)
+		fmt.Println(configurations[c].Name)
+		fmt.Printf("compressed=%v\n", buffer.Len())
+		fmt.Printf("ratio=%v\n", float64(buffer.Len())/float64(len(input)))
+		fmt.Println(time.Now().Sub(start).String())
+
+		/* decompress */
+		start, in = time.Now(), make(chan []byte, 1)
+		uncompressed := make([]byte, len(input))
+		in <- uncompressed
+		close(in)
+		configurations[c].Uncompress(in, buffer)
+		if bytes.Compare(input, uncompressed) != 0 {
+			fmt.Println("decompression didn't work")
+		} else {
+			fmt.Println("decompression worked")
+		}
+		fmt.Println(time.Now().Sub(start).String())
+		fmt.Println()
+	}
+
 	/* compress */
 	start, in, data := time.Now(), make(chan []byte, 1), make([]byte, len(input))
 	copy(data, input)
 	buffer := &bytes.Buffer{}
 	in <- data
 	close(in)
-	compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontRunLengthCoder().AdaptiveCoder().Code(buffer)
-	fmt.Println("adaptive coder")
+	code, sentinels := compress.BurrowsWheelerCoder(in)
+	code.MoveToFrontRunLengthCoder().AdaptiveCoder().Code(buffer)
+	fmt.Println("suffix tree adaptive coder")
 	fmt.Printf("compressed=%v\n", buffer.Len())
-	fmt.Printf("ratio=%v\n", float64(buffer.Len()) / float64(len(input)))
+	fmt.Printf("ratio=%v\n", float64(buffer.Len())/float64(len(input)))
 	fmt.Println(time.Now().Sub(start).String())
 
 	/* decompress */
 	start, in = time.Now(), make(chan []byte, 1)
 	uncompressed := make([]byte, len(input))
-	in <- uncompressed
-	close(in)
-	compress.BijectiveBurrowsWheelerDecoder(in).MoveToFrontRunLengthDecoder().AdaptiveDecoder().Decode(buffer)
-	if bytes.Compare(input, uncompressed) != 0 {
-		fmt.Println("decompression didn't work")
-	} else {
-		fmt.Println("decompression worked")
-	}
-	fmt.Println(time.Now().Sub(start).String())
-
-	/* compress */
-	start, in = time.Now(), make(chan []byte, 1)
-	copy(data, input)
-	buffer.Reset()
-	in <- data
-	close(in)
-	code, sentinels := compress.BurrowsWheelerCoder(in)
-	code.MoveToFrontRunLengthCoder().AdaptiveCoder().Code(buffer)
-	fmt.Println("\nsuffix tree adaptive coder")
-	fmt.Printf("compressed=%v\n", buffer.Len())
-	fmt.Printf("ratio=%v\n", float64(buffer.Len()) / float64(len(input)))
-	fmt.Println(time.Now().Sub(start).String())
-
-	/* decompress */
-	start, in = time.Now(), make(chan []byte, 1)
-	uncompressed = make([]byte, len(input))
 	in <- uncompressed
 	close(in)
 	compress.BurrowsWheelerDecoder(in, sentinels).MoveToFrontRunLengthDecoder().AdaptiveDecoder().Decode(buffer)
@@ -121,108 +212,37 @@ func Compress(input []byte) {
 		fmt.Println("decompression worked")
 	}
 	fmt.Println(time.Now().Sub(start).String())
-
-	/* compress */
-	start, in = time.Now(), make(chan []byte, 1)
-	copy(data, input)
-	buffer.Reset()
-	in <- data
-	close(in)
-	compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontRunLengthCoder().AdaptivePredictiveCoder().Code(buffer)
-	fmt.Println("\nadaptive predictive coder")
-	fmt.Printf("compressed=%v\n", buffer.Len())
-	fmt.Printf("ratio=%v\n", float64(buffer.Len()) / float64(len(input)))
-	fmt.Println(time.Now().Sub(start).String())
-
-	/* decompress */
-	start, in = time.Now(), make(chan []byte, 1)
-	uncompressed = make([]byte, len(input))
-	in <- uncompressed
-	close(in)
-	compress.BijectiveBurrowsWheelerDecoder(in).MoveToFrontRunLengthDecoder().AdaptivePredictiveDecoder().Decode(buffer)
-	if bytes.Compare(input, uncompressed) != 0 {
-		fmt.Println("decompression didn't work")
-	} else {
-		fmt.Println("decompression worked")
-	}
-	fmt.Println(time.Now().Sub(start).String())
-
-	/* compress */
-	start, in = time.Now(), make(chan []byte, 1)
-	copy(data, input)
-	buffer.Reset()
-	in <- data
-	close(in)
-	compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontCoder().AdaptivePredictiveBitCoder().Code(buffer)
-	fmt.Println("\nadaptive predictive bit coder")
-	fmt.Printf("compressed=%v\n", buffer.Len())
-	fmt.Printf("ratio=%v\n", float64(buffer.Len()) / float64(len(input)))
-	fmt.Println(time.Now().Sub(start).String())
-
-	/* decompress */
-	start, in = time.Now(), make(chan []byte, 1)
-	uncompressed = make([]byte, len(input))
-	in <- uncompressed
-	close(in)
-	compress.BijectiveBurrowsWheelerDecoder(in).MoveToFrontDecoder().AdaptivePredictiveBitDecoder().Decode(buffer)
-	if bytes.Compare(input, uncompressed) != 0 {
-		fmt.Println("decompression didn't work")
-	} else {
-		fmt.Println("decompression worked")
-	}
-	fmt.Println(time.Now().Sub(start).String())
+	fmt.Println()
 }
 
 func Compress32(input []byte) {
-	/* compress */
-	start, in, data := time.Now(), make(chan []byte, 1), make([]byte, len(input))
-	copy(data, input)
-	buffer := &bytes.Buffer{}
-	in <- data
-	close(in)
-	compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontRunLengthCoder().AdaptiveCoder32().Code(buffer)
-	fmt.Println("adaptive coder 32")
-	fmt.Printf("compressed=%v\n", buffer.Len())
-	fmt.Printf("ratio=%v\n", float64(buffer.Len()) / float64(len(input)))
-	fmt.Println(time.Now().Sub(start).String())
+	for c := range configurations32 {
+		/* compress */
+		start, in, data := time.Now(), make(chan []byte, 1), make([]byte, len(input))
+		copy(data, input)
+		buffer := &bytes.Buffer{}
+		in <- data
+		close(in)
+		configurations32[c].Compress(in, buffer)
+		fmt.Println(configurations32[c].Name)
+		fmt.Printf("compressed=%v\n", buffer.Len())
+		fmt.Printf("ratio=%v\n", float64(buffer.Len())/float64(len(input)))
+		fmt.Println(time.Now().Sub(start).String())
 
-	/* decompress */
-	start, in = time.Now(), make(chan []byte, 1)
-	uncompressed := make([]byte, len(input))
-	in <- uncompressed
-	close(in)
-	compress.BijectiveBurrowsWheelerDecoder(in).MoveToFrontRunLengthDecoder().AdaptiveDecoder32().Decode(buffer)
-	if bytes.Compare(input, uncompressed) != 0 {
-		fmt.Println("decompression didn't work")
-	} else {
-		fmt.Println("decompression worked")
+		/* decompress */
+		start, in = time.Now(), make(chan []byte, 1)
+		uncompressed := make([]byte, len(input))
+		in <- uncompressed
+		close(in)
+		configurations32[c].Uncompress(in, buffer)
+		if bytes.Compare(input, uncompressed) != 0 {
+			fmt.Println("decompression didn't work")
+		} else {
+			fmt.Println("decompression worked")
+		}
+		fmt.Println(time.Now().Sub(start).String())
+		fmt.Println()
 	}
-	fmt.Println(time.Now().Sub(start).String())
-
-	/* compress */
-	start, in = time.Now(), make(chan []byte, 1)
-	copy(data, input)
-	buffer.Reset()
-	in <- data
-	close(in)
-	compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontRunLengthCoder().AdaptivePredictiveCoder32().Code(buffer)
-	fmt.Println("\nadaptive predictive coder 32")
-	fmt.Printf("compressed=%v\n", buffer.Len())
-	fmt.Printf("ratio=%v\n", float64(buffer.Len()) / float64(len(input)))
-	fmt.Println(time.Now().Sub(start).String())
-
-	/* decompress */
-	start, in = time.Now(), make(chan []byte, 1)
-	uncompressed = make([]byte, len(input))
-	in <- uncompressed
-	close(in)
-	compress.BijectiveBurrowsWheelerDecoder(in).MoveToFrontRunLengthDecoder().AdaptivePredictiveDecoder32().Decode(buffer)
-	if bytes.Compare(input, uncompressed) != 0 {
-		fmt.Println("decompression didn't work")
-	} else {
-		fmt.Println("decompression worked")
-	}
-	fmt.Println(time.Now().Sub(start).String())
 }
 
 func Test(file string) {
@@ -285,7 +305,7 @@ func Test(file string) {
 func main() {
 	fmt.Printf("cpus=%v\n", runtime.NumCPU())
 	runtime.GOMAXPROCS(64)
-	files := [...]string {"alice30.txt", "310px-Tesla_colorado_adjusted.jpg"}
+	files := [...]string{"alice30.txt", "310px-Tesla_colorado_adjusted.jpg"}
 	for _, file := range files {
 		fmt.Printf("./%v\n", file)
 		Test(file)

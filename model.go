@@ -4,6 +4,11 @@
 
 package compress
 
+const (
+	filterScale = 4096
+	filterShift = 5
+)
+
 func (coder Coder16) AdaptiveCoder() Model {
 	out := make(chan []Symbol, BUFFER_CHAN_SIZE)
 
@@ -103,6 +108,57 @@ func (coder Coder16) AdaptivePredictiveCoder() Model {
 	return Model{Input: out}
 }
 
+func (coder Coder16) AdaptiveBitCoder() Model {
+	out := make(chan []Symbol, BUFFER_CHAN_SIZE)
+
+	go func() {
+		table, buffer := [2]uint16{}, [BUFFER_POOL_SIZE]Symbol{}
+		table[0] = 1
+		table[1] = 1
+
+		highest := uint32(0)
+		for a := coder.Alphabit - 1; a > 0; a >>= 1 {
+			highest++
+		}
+
+		current, offset, index, mask := buffer[0:BUFFER_SIZE], BUFFER_SIZE, 0, uint16(1)<<(highest-1)
+		for input := range coder.Input {
+			for _, s := range input {
+				for bit := mask; bit > 0; bit >>= 1 {
+					b, low, high, scale := uint16(0), uint16(0), table[0], table[0]+table[1]
+					if bit&s != 0 {
+						b, low, high = 1, high, scale
+					}
+
+					current[index], index = Symbol{Scale: scale, Low: low, High: high}, index+1
+					if index == BUFFER_SIZE {
+						out <- current
+						next := offset + BUFFER_SIZE
+						current, offset, index = buffer[offset:next], next&BUFFER_POOL_SIZE_MASK, 0
+					}
+
+					table[b]++
+					if scale >= MAX_SCALE16 {
+						table[0] >>= 1
+						table[1] >>= 1
+						if table[0] == 0 {
+							table[0] = 1
+						}
+						if table[1] == 0 {
+							table[1] = 1
+						}
+					}
+				}
+			}
+		}
+
+		out <- current[:index]
+		close(out)
+	}()
+
+	return Model{Input: out}
+}
+
 func (coder Coder16) AdaptivePredictiveBitCoder() Model {
 	out := make(chan []Symbol, BUFFER_CHAN_SIZE)
 
@@ -144,6 +200,102 @@ func (coder Coder16) AdaptivePredictiveBitCoder() Model {
 						if table[context][1] == 0 {
 							table[context][1] = 1
 						}
+					}
+
+					context = b | (context << 1)
+				}
+			}
+		}
+
+		out <- current[:index]
+		close(out)
+	}()
+
+	return Model{Input: out}
+}
+
+// https://fgiesen.wordpress.com/2015/05/26/models-for-adaptive-arithmetic-coding/
+func (coder Coder16) FilteredAdaptiveBitCoder() Model {
+	out := make(chan []Symbol, BUFFER_CHAN_SIZE)
+
+	go func() {
+		const scale = uint16(filterScale)
+		p1 := scale / 2
+
+		buffer := [BUFFER_POOL_SIZE]Symbol{}
+
+		highest := uint32(0)
+		for a := coder.Alphabit - 1; a > 0; a >>= 1 {
+			highest++
+		}
+
+		current, offset, index, mask := buffer[0:BUFFER_SIZE], BUFFER_SIZE, 0, uint16(1)<<(highest-1)
+		for input := range coder.Input {
+			for _, s := range input {
+				for bit := mask; bit > 0; bit >>= 1 {
+					b, low, high := uint16(0), uint16(0), scale-p1
+					if bit&s != 0 {
+						b, low, high = 1, high, scale
+					}
+
+					current[index], index = Symbol{Scale: scale, Low: low, High: high}, index+1
+					if index == BUFFER_SIZE {
+						out <- current
+						next := offset + BUFFER_SIZE
+						current, offset, index = buffer[offset:next], next&BUFFER_POOL_SIZE_MASK, 0
+					}
+
+					if b == 0 {
+						p1 -= p1 >> filterShift
+					} else {
+						p1 += (scale - p1) >> filterShift
+					}
+				}
+			}
+		}
+
+		out <- current[:index]
+		close(out)
+	}()
+
+	return Model{Input: out}
+}
+
+func (coder Coder16) FilteredAdaptivePredictiveBitCoder() Model {
+	out := make(chan []Symbol, BUFFER_CHAN_SIZE)
+
+	go func() {
+		const scale = uint16(filterScale)
+		table, context, buffer := make([]uint16, 65536), uint16(0), [BUFFER_POOL_SIZE]Symbol{}
+		for i, _ := range table {
+			table[i] = scale / 2
+		}
+
+		highest := uint32(0)
+		for a := coder.Alphabit - 1; a > 0; a >>= 1 {
+			highest++
+		}
+
+		current, offset, index, mask := buffer[0:BUFFER_SIZE], BUFFER_SIZE, 0, uint16(1)<<(highest-1)
+		for input := range coder.Input {
+			for _, s := range input {
+				for bit := mask; bit > 0; bit >>= 1 {
+					b, low, high := uint16(0), uint16(0), scale-table[context]
+					if bit&s != 0 {
+						b, low, high = 1, high, scale
+					}
+
+					current[index], index = Symbol{Scale: scale, Low: low, High: high}, index+1
+					if index == BUFFER_SIZE {
+						out <- current
+						next := offset + BUFFER_SIZE
+						current, offset, index = buffer[offset:next], next&BUFFER_POOL_SIZE_MASK, 0
+					}
+
+					if b == 0 {
+						table[context] -= table[context] >> filterShift
+					} else {
+						table[context] += (scale - table[context]) >> filterShift
 					}
 
 					context = b | (context << 1)
@@ -237,6 +389,51 @@ func (decoder Coder16) AdaptivePredictiveDecoder() Model {
 	return Model{Scale: uint32(decoder.Alphabit), Output: lookup}
 }
 
+func (decoder Coder16) AdaptiveBitDecoder() Model {
+	table := [2]uint16{}
+	table[0] = 1
+	table[1] = 1
+
+	highest := uint32(0)
+	for a := decoder.Alphabit - 1; a > 0; a >>= 1 {
+		highest++
+	}
+	mask := uint16(1) << (highest - 1)
+	bit, bits := mask, uint16(0)
+
+	lookup := func(code uint16) Symbol {
+		scale, low, high, b := table[0]+table[1], uint16(0), uint16(0), uint16(0)
+		if code < table[0] {
+			high, bit = table[0], bit>>1
+		} else {
+			low, high, bits, bit, b = table[0], scale, bits|bit, bit>>1, 1
+		}
+
+		table[b]++
+		if scale >= MAX_SCALE16 {
+			table[0] >>= 1
+			table[1] >>= 1
+			if table[0] == 0 {
+				table[0] = 1
+			}
+			if table[1] == 0 {
+				table[1] = 1
+			}
+		}
+
+		if bit == 0 {
+			if decoder.Output(bits) {
+				return Symbol{}
+			}
+			bits, bit = 0, mask
+		}
+
+		return Symbol{Scale: table[0] + table[1], Low: low, High: high}
+	}
+
+	return Model{Scale: uint32(2), Output: lookup}
+}
+
 func (decoder Coder16) AdaptivePredictiveBitDecoder() Model {
 	table, context := make([][2]uint16, 65536), uint16(0)
 	for i, _ := range table {
@@ -283,6 +480,86 @@ func (decoder Coder16) AdaptivePredictiveBitDecoder() Model {
 	}
 
 	return Model{Scale: uint32(2), Output: lookup}
+}
+
+func (decoder Coder16) FilteredAdaptiveBitDecoder() Model {
+	const scale = uint16(filterScale)
+	p1 := scale / 2
+
+	highest := uint32(0)
+	for a := decoder.Alphabit - 1; a > 0; a >>= 1 {
+		highest++
+	}
+	mask := uint16(1) << (highest - 1)
+	bit, bits := mask, uint16(0)
+
+	lookup := func(code uint16) Symbol {
+		low, high, b := uint16(0), uint16(0), uint16(0)
+		if p0 := scale - p1; code < p0 {
+			high, bit = p0, bit>>1
+		} else {
+			low, high, bits, bit, b = p0, scale, bits|bit, bit>>1, 1
+		}
+
+		if b == 0 {
+			p1 -= p1 >> filterShift
+		} else {
+			p1 += (scale - p1) >> filterShift
+		}
+
+		if bit == 0 {
+			if decoder.Output(bits) {
+				return Symbol{}
+			}
+			bits, bit = 0, mask
+		}
+
+		return Symbol{Scale: scale, Low: low, High: high}
+	}
+
+	return Model{Scale: uint32(scale), Output: lookup}
+}
+
+func (decoder Coder16) FilteredAdaptivePredictiveBitDecoder() Model {
+	const scale = uint16(filterScale)
+	table, context := make([]uint16, 65536), uint16(0)
+	for i, _ := range table {
+		table[i] = scale / 2
+	}
+
+	highest := uint32(0)
+	for a := decoder.Alphabit - 1; a > 0; a >>= 1 {
+		highest++
+	}
+	mask := uint16(1) << (highest - 1)
+	bit, bits := mask, uint16(0)
+
+	lookup := func(code uint16) Symbol {
+		low, high, b := uint16(0), uint16(0), uint16(0)
+		if p0 := scale - table[context]; code < p0 {
+			high, bit = p0, bit>>1
+		} else {
+			low, high, bits, bit, b = p0, scale, bits|bit, bit>>1, 1
+		}
+
+		if b == 0 {
+			table[context] -= table[context] >> filterShift
+		} else {
+			table[context] += (scale - table[context]) >> filterShift
+		}
+		context = b | (context << 1)
+
+		if bit == 0 {
+			if decoder.Output(bits) {
+				return Symbol{}
+			}
+			bits, bit = 0, mask
+		}
+
+		return Symbol{Scale: scale, Low: low, High: high}
+	}
+
+	return Model{Scale: uint32(scale), Output: lookup}
 }
 
 func (coder Coder16) AdaptiveCoder32() Model32 {
