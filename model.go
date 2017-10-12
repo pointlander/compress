@@ -7,7 +7,93 @@ package compress
 const (
 	filterScale = 4096
 	filterShift = 5
+	cdfScale    = 32768
+	cdfRate     = 5
 )
+
+type CDF struct {
+	CDF   []uint16
+	Mixin [][]uint16
+}
+
+func NewCDF(size int) *CDF {
+	if size != 256 {
+		panic("size is not 256")
+	}
+	cdf, mixin := make([]uint16, size+1), make([][]uint16, size)
+
+	sum := 0
+	for i := range cdf {
+		cdf[i] = uint16(sum)
+		sum += 128
+	}
+
+	for i := range mixin {
+		sum, m := 0, make([]uint16, size+1)
+		for j := range m {
+			m[j] = uint16(sum)
+			sum += 4
+			if j == i {
+				sum += cdfScale - 4*size
+			}
+		}
+		mixin[i] = m
+	}
+
+	return &CDF{
+		CDF:   cdf,
+		Mixin: mixin,
+	}
+}
+
+func (c *CDF) Len() int {
+	return len(c.CDF)
+}
+
+func (c *CDF) Less(i, j int) bool {
+	cdf := c.CDF
+	return cdf[i] < cdf[j]
+}
+
+func (c *CDF) Swap(i, j int) {
+	cdf := c.CDF
+	cdf[i], cdf[j] = cdf[j], cdf[i]
+}
+
+func (c *CDF) Update(s int) {
+	cdf, mixin := c.CDF, c.Mixin[s]
+	size := len(cdf) - 1
+	for i := 1; i < size; i++ {
+		a, b := int(cdf[i]), int(mixin[i])
+		if a < 0 {
+			panic("a is less than zero")
+		}
+		if b < 0 {
+			panic("b is less than zero")
+		}
+		c := (b - a)
+		if c >= 0 {
+			c >>= cdfRate
+			c = a + c
+		} else {
+			c = -c
+			c >>= cdfRate
+			c = a - c
+		}
+		if c < 0 {
+			panic("c is less than zero")
+		}
+		cdf[i] = uint16(c)
+	}
+	if cdf[size] != cdfScale {
+		panic("cdf scale is incorrect")
+	}
+	for i := 1; i < len(cdf); i++ {
+		if cdf[i] <= cdf[i-1] {
+			panic("invalid cdf")
+		}
+	}
+}
 
 func (coder Coder16) AdaptiveCoder() Model {
 	out := make(chan []Symbol, BUFFER_CHAN_SIZE)
@@ -310,6 +396,34 @@ func (coder Coder16) FilteredAdaptivePredictiveBitCoder() Model {
 	return Model{Input: out}
 }
 
+func (coder Coder16) FilteredAdaptiveCoder() Model {
+	out := make(chan []Symbol, BUFFER_CHAN_SIZE)
+
+	go func() {
+		cdf := NewCDF(int(coder.Alphabit))
+		buffer := [BUFFER_POOL_SIZE]Symbol{}
+
+		current, offset, index := buffer[0:BUFFER_SIZE], BUFFER_SIZE, 0
+		for input := range coder.Input {
+			for _, s := range input {
+				current[index], index = Symbol{Scale: cdfScale, Low: cdf.CDF[s], High: cdf.CDF[s+1]}, index+1
+				if index == BUFFER_SIZE {
+					out <- current
+					next := offset + BUFFER_SIZE
+					current, offset, index = buffer[offset:next], next&BUFFER_POOL_SIZE_MASK, 0
+				}
+
+				cdf.Update(int(s))
+			}
+		}
+
+		out <- current[:index]
+		close(out)
+	}()
+
+	return Model{Input: out}
+}
+
 func (decoder Coder16) AdaptiveDecoder() Model {
 	table, scale := make([]uint16, decoder.Alphabit), uint16(0)
 	for i, _ := range table {
@@ -560,6 +674,31 @@ func (decoder Coder16) FilteredAdaptivePredictiveBitDecoder() Model {
 	}
 
 	return Model{Scale: uint32(scale), Output: lookup}
+}
+
+func (decoder Coder16) FilteredAdaptiveDecoder() Model {
+	cdf := NewCDF(int(decoder.Alphabit))
+
+	lookup := func(code uint16) Symbol {
+		low, high, done := uint16(0), uint16(0), false
+		for s := 1; s < len(cdf.CDF); s++ {
+			if code < cdf.CDF[s] {
+				symbol := s - 1
+				low, high, done = cdf.CDF[s-1], cdf.CDF[s], decoder.Output(uint16(symbol))
+
+				cdf.Update(symbol)
+				break
+			}
+		}
+
+		if done {
+			return Symbol{}
+		}
+
+		return Symbol{Scale: cdfScale, Low: low, High: high}
+	}
+
+	return Model{Scale: uint32(cdfScale), Output: lookup}
 }
 
 func (coder Coder16) AdaptiveCoder32() Model32 {

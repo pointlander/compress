@@ -135,6 +135,15 @@ var configurations = [...]Configuration{
 			compress.BijectiveBurrowsWheelerDecoder(in).MoveToFrontDecoder().FilteredAdaptivePredictiveBitDecoder().Decode(buffer)
 		},
 	},
+	{
+		Name: "filtered adaptive coder",
+		Compress: func(in chan []byte, buffer *bytes.Buffer) {
+			compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontCoder().FilteredAdaptiveCoder().Code(buffer)
+		},
+		Uncompress: func(in chan []byte, buffer *bytes.Buffer) {
+			compress.BijectiveBurrowsWheelerDecoder(in).MoveToFrontDecoder().FilteredAdaptiveDecoder().Decode(buffer)
+		},
+	},
 }
 
 var configurations32 = [...]Configuration{

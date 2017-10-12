@@ -6,6 +6,8 @@ package compress
 
 import (
 	"bytes"
+	"io/ioutil"
+	"log"
 	/*"fmt"*/
 	"strconv"
 	"testing"
@@ -220,6 +222,44 @@ func TestCode32(t *testing.T) {
 	Model32{Scale: 11, Output: lookup}.Decode(buffer)
 	if bytes.Compare(test, uncompressed) != 0 {
 		t.Errorf("arithmetic decoding failed")
+	}
+}
+
+func TestFiltered(t *testing.T) {
+	testFiltered := func(test string) {
+		t.Log(test, len(test))
+		input := make([]uint16, len(test))
+		testBytes := []byte(test)
+		for i := range testBytes {
+			input[i] = uint16(testBytes[i])
+		}
+		symbols, buffer := make(chan []uint16, 1), &bytes.Buffer{}
+		symbols <- input
+		close(symbols)
+		Coder16{Alphabit: 256, Input: symbols}.FilteredAdaptiveCoder().Code(buffer)
+		t.Log(buffer.Len())
+
+		out, i := make([]byte, len(test)), 0
+		output := func(symbol uint16) bool {
+			out[i] = byte(symbol)
+			i++
+			return i >= len(test)
+		}
+		Coder16{Alphabit: 256, Output: output}.FilteredAdaptiveDecoder().Decode(buffer)
+		t.Log(string(out))
+		if string(out) != test {
+			t.Errorf("%v != %v", string(out), test)
+		}
+	}
+
+	d, err := ioutil.ReadFile("bench/alice30.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
+	tests := append(TESTS[:], string(d))
+
+	for _, test := range tests {
+		testFiltered(test)
 	}
 }
 
