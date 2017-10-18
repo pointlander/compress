@@ -7,7 +7,7 @@ package compress
 const (
 	filterScale = 4096
 	filterShift = 5
-	cdfScale    = 32768
+	cdfScale    = 1 << (16 - 3)
 	cdfRate     = 5
 )
 
@@ -25,16 +25,16 @@ func NewCDF(size int) *CDF {
 	sum := 0
 	for i := range cdf {
 		cdf[i] = uint16(sum)
-		sum += 128
+		sum += 32
 	}
 
 	for i := range mixin {
 		sum, m := 0, make([]uint16, size+1)
 		for j := range m {
 			m[j] = uint16(sum)
-			sum += 4
+			sum++
 			if j == i {
-				sum += cdfScale - 4*size
+				sum += cdfScale - size
 			}
 		}
 		mixin[i] = m
