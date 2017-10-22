@@ -9,11 +9,13 @@ const (
 	filterShift = 5
 	cdfScale    = 1 << (16 - 3)
 	cdfRate     = 5
+	CDFScale    = cdfScale
 )
 
 type CDF struct {
-	CDF   []uint16
-	Mixin [][]uint16
+	CDF    []uint16
+	Mixin  [][]uint16
+	Verify bool
 }
 
 func NewCDF(size int) *CDF {
@@ -41,8 +43,9 @@ func NewCDF(size int) *CDF {
 	}
 
 	return &CDF{
-		CDF:   cdf,
-		Mixin: mixin,
+		CDF:    cdf,
+		Mixin:  mixin,
+		Verify: true,
 	}
 }
 
@@ -63,14 +66,43 @@ func (c *CDF) Swap(i, j int) {
 func (c *CDF) Update(s int) {
 	cdf, mixin := c.CDF, c.Mixin[s]
 	size := len(cdf) - 1
+
+	if c.Verify {
+		for i := 1; i < size; i++ {
+			a, b := int(cdf[i]), int(mixin[i])
+			if a < 0 {
+				panic("a is less than zero")
+			}
+			if b < 0 {
+				panic("b is less than zero")
+			}
+			c := (b - a)
+			if c >= 0 {
+				c >>= cdfRate
+				c = a + c
+			} else {
+				c = -c
+				c >>= cdfRate
+				c = a - c
+			}
+			if c < 0 {
+				panic("c is less than zero")
+			}
+			cdf[i] = uint16(c)
+		}
+		if cdf[size] != cdfScale {
+			panic("cdf scale is incorrect")
+		}
+		for i := 1; i < len(cdf); i++ {
+			if cdf[i] <= cdf[i-1] {
+				panic("invalid cdf")
+			}
+		}
+		return
+	}
+
 	for i := 1; i < size; i++ {
 		a, b := int(cdf[i]), int(mixin[i])
-		if a < 0 {
-			panic("a is less than zero")
-		}
-		if b < 0 {
-			panic("b is less than zero")
-		}
 		c := (b - a)
 		if c >= 0 {
 			c >>= cdfRate
@@ -80,18 +112,7 @@ func (c *CDF) Update(s int) {
 			c >>= cdfRate
 			c = a - c
 		}
-		if c < 0 {
-			panic("c is less than zero")
-		}
 		cdf[i] = uint16(c)
-	}
-	if cdf[size] != cdfScale {
-		panic("cdf scale is incorrect")
-	}
-	for i := 1; i < len(cdf); i++ {
-		if cdf[i] <= cdf[i-1] {
-			panic("invalid cdf")
-		}
 	}
 }
 
@@ -396,11 +417,11 @@ func (coder Coder16) FilteredAdaptivePredictiveBitCoder() Model {
 	return Model{Input: out}
 }
 
-func (coder Coder16) FilteredAdaptiveCoder() Model {
+func (coder Coder16) FilteredAdaptiveCoder(newCDF func(size int) *CDF) Model {
 	out := make(chan []Symbol, BUFFER_CHAN_SIZE)
 
 	go func() {
-		cdf := NewCDF(int(coder.Alphabit))
+		cdf := newCDF(int(coder.Alphabit))
 		buffer := [BUFFER_POOL_SIZE]Symbol{}
 
 		current, offset, index := buffer[0:BUFFER_SIZE], BUFFER_SIZE, 0
@@ -676,8 +697,8 @@ func (decoder Coder16) FilteredAdaptivePredictiveBitDecoder() Model {
 	return Model{Scale: uint32(scale), Output: lookup}
 }
 
-func (decoder Coder16) FilteredAdaptiveDecoder() Model {
-	cdf := NewCDF(int(decoder.Alphabit))
+func (decoder Coder16) FilteredAdaptiveDecoder(newCDF func(size int) *CDF) Model {
+	cdf := newCDF(int(decoder.Alphabit))
 
 	lookup := func(code uint16) Symbol {
 		low, high, done := uint16(0), uint16(0), false
