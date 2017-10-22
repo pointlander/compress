@@ -7,7 +7,8 @@ package compress
 const (
 	filterScale = 4096
 	filterShift = 5
-	cdfScale    = 1 << (16 - 3)
+	cdfFixed    = 16 - 3
+	cdfScale    = 1 << cdfFixed
 	cdfRate     = 5
 	CDFScale    = cdfScale
 )
@@ -427,7 +428,7 @@ func (coder Coder16) FilteredAdaptiveCoder(newCDF func(size int) *CDF) Model {
 		current, offset, index := buffer[0:BUFFER_SIZE], BUFFER_SIZE, 0
 		for input := range coder.Input {
 			for _, s := range input {
-				current[index], index = Symbol{Scale: cdfScale, Low: cdf.CDF[s], High: cdf.CDF[s+1]}, index+1
+				current[index], index = Symbol{Low: cdf.CDF[s], High: cdf.CDF[s+1]}, index+1
 				if index == BUFFER_SIZE {
 					out <- current
 					next := offset + BUFFER_SIZE
@@ -442,7 +443,7 @@ func (coder Coder16) FilteredAdaptiveCoder(newCDF func(size int) *CDF) Model {
 		close(out)
 	}()
 
-	return Model{Input: out}
+	return Model{Input: out, Fixed: cdfFixed}
 }
 
 func (decoder Coder16) AdaptiveDecoder() Model {
@@ -716,10 +717,10 @@ func (decoder Coder16) FilteredAdaptiveDecoder(newCDF func(size int) *CDF) Model
 			return Symbol{}
 		}
 
-		return Symbol{Scale: cdfScale, Low: low, High: high}
+		return Symbol{Low: low, High: high}
 	}
 
-	return Model{Scale: uint32(cdfScale), Output: lookup}
+	return Model{Fixed: cdfFixed, Output: lookup}
 }
 
 func (coder Coder16) AdaptiveCoder32() Model32 {
