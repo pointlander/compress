@@ -76,7 +76,7 @@ func (c *CDF) Update(s int) {
 			if b < 0 {
 				panic("b is less than zero")
 			}
-			c := (b - a)
+			/*c := (b - a)
 			if c >= 0 {
 				c >>= cdfRate
 				c = a + c
@@ -87,8 +87,8 @@ func (c *CDF) Update(s int) {
 			}
 			if c < 0 {
 				panic("c is less than zero")
-			}
-			cdf[i] = uint16(c)
+			}*/
+			cdf[i] = uint16(a + ((b - a) >> cdfRate))
 		}
 		if cdf[size] != cdfScale {
 			panic("cdf scale is incorrect")
@@ -103,7 +103,7 @@ func (c *CDF) Update(s int) {
 
 	for i := 1; i < size; i++ {
 		a, b := int(cdf[i]), int(mixin[i])
-		c := (b - a)
+		/*c := (b - a)
 		if c >= 0 {
 			c >>= cdfRate
 			c = a + c
@@ -111,8 +111,8 @@ func (c *CDF) Update(s int) {
 			c = -c
 			c >>= cdfRate
 			c = a - c
-		}
-		cdf[i] = uint16(c)
+		}*/
+		cdf[i] = uint16(a + ((b - a) >> cdfRate))
 	}
 }
 
