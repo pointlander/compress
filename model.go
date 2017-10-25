@@ -4,6 +4,8 @@
 
 package compress
 
+import "fmt"
+
 const (
 	filterScale = 4096
 	filterShift = 5
@@ -95,8 +97,10 @@ func (c *CDF) Update(s int) {
 			panic("cdf scale is incorrect")
 		}
 		for i := 1; i < len(cdf); i++ {
-			if cdf[i] <= cdf[i-1] {
-				panic("invalid cdf")
+			if a, b := cdf[i], cdf[i-1]; a < b {
+				panic(fmt.Sprintf("invalid cdf %v,%v < %v,%v", i, a, i-1, b))
+			} else if a == b {
+				panic(fmt.Sprintf("invalid cdf %v,%v = %v,%v", i, a, i-1, b))
 			}
 		}
 		return
