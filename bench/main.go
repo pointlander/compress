@@ -138,10 +138,10 @@ var configurations = [...]Configuration{
 	{
 		Name: "filtered adaptive coder",
 		Compress: func(in chan []byte, buffer *bytes.Buffer) {
-			compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontCoder().FilteredAdaptiveCoder(compress.NewCDF).Code(buffer)
+			compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontCoder().FilteredAdaptiveCoder(compress.NewCDF16).Code(buffer)
 		},
 		Uncompress: func(in chan []byte, buffer *bytes.Buffer) {
-			compress.BijectiveBurrowsWheelerDecoder(in).MoveToFrontDecoder().FilteredAdaptiveDecoder(compress.NewCDF).Decode(buffer)
+			compress.BijectiveBurrowsWheelerDecoder(in).MoveToFrontDecoder().FilteredAdaptiveDecoder(compress.NewCDF16).Decode(buffer)
 		},
 	},
 }

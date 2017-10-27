@@ -236,7 +236,7 @@ func TestFiltered(t *testing.T) {
 		symbols, buffer := make(chan []uint16, 1), &bytes.Buffer{}
 		symbols <- input
 		close(symbols)
-		Coder16{Alphabit: 256, Input: symbols}.FilteredAdaptiveCoder(NewCDF).Code(buffer)
+		Coder16{Alphabit: 256, Input: symbols}.FilteredAdaptiveCoder(NewCDF16).Code(buffer)
 		t.Log(buffer.Len())
 
 		out, i := make([]byte, len(test)), 0
@@ -245,7 +245,7 @@ func TestFiltered(t *testing.T) {
 			i++
 			return i >= len(test)
 		}
-		Coder16{Alphabit: 256, Output: output}.FilteredAdaptiveDecoder(NewCDF).Decode(buffer)
+		Coder16{Alphabit: 256, Output: output}.FilteredAdaptiveDecoder(NewCDF16).Decode(buffer)
 		t.Log(string(out))
 		if string(out) != test {
 			t.Errorf("%v != %v", string(out), test)

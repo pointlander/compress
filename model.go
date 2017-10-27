@@ -4,122 +4,10 @@
 
 package compress
 
-import "fmt"
-
 const (
 	filterScale = 4096
 	filterShift = 5
-	cdfFixed    = 16 - 3
-	cdfScale    = 1 << cdfFixed
-	cdfRate     = 5
-	CDFScale    = cdfScale
 )
-
-type CDF struct {
-	CDF    []uint16
-	Mixin  [][]uint16
-	Verify bool
-}
-
-func NewCDF(size int) *CDF {
-	if size != 256 {
-		panic("size is not 256")
-	}
-	cdf, mixin := make([]uint16, size+1), make([][]uint16, size)
-
-	sum := 0
-	for i := range cdf {
-		cdf[i] = uint16(sum)
-		sum += 32
-	}
-
-	for i := range mixin {
-		sum, m := 0, make([]uint16, size+1)
-		for j := range m {
-			m[j] = uint16(sum)
-			sum++
-			if j == i {
-				sum += cdfScale - size
-			}
-		}
-		mixin[i] = m
-	}
-
-	return &CDF{
-		CDF:    cdf,
-		Mixin:  mixin,
-		Verify: true,
-	}
-}
-
-func (c *CDF) Len() int {
-	return len(c.CDF)
-}
-
-func (c *CDF) Less(i, j int) bool {
-	cdf := c.CDF
-	return cdf[i] < cdf[j]
-}
-
-func (c *CDF) Swap(i, j int) {
-	cdf := c.CDF
-	cdf[i], cdf[j] = cdf[j], cdf[i]
-}
-
-func (c *CDF) Update(s int) {
-	cdf, mixin := c.CDF, c.Mixin[s]
-	size := len(cdf) - 1
-
-	if c.Verify {
-		for i := 1; i < size; i++ {
-			a, b := int(cdf[i]), int(mixin[i])
-			if a < 0 {
-				panic("a is less than zero")
-			}
-			if b < 0 {
-				panic("b is less than zero")
-			}
-			/*c := (b - a)
-			if c >= 0 {
-				c >>= cdfRate
-				c = a + c
-			} else {
-				c = -c
-				c >>= cdfRate
-				c = a - c
-			}
-			if c < 0 {
-				panic("c is less than zero")
-			}*/
-			cdf[i] = uint16(a + ((b - a) >> cdfRate))
-		}
-		if cdf[size] != cdfScale {
-			panic("cdf scale is incorrect")
-		}
-		for i := 1; i < len(cdf); i++ {
-			if a, b := cdf[i], cdf[i-1]; a < b {
-				panic(fmt.Sprintf("invalid cdf %v,%v < %v,%v", i, a, i-1, b))
-			} else if a == b {
-				panic(fmt.Sprintf("invalid cdf %v,%v = %v,%v", i, a, i-1, b))
-			}
-		}
-		return
-	}
-
-	for i := 1; i < size; i++ {
-		a, b := int(cdf[i]), int(mixin[i])
-		/*c := (b - a)
-		if c >= 0 {
-			c >>= cdfRate
-			c = a + c
-		} else {
-			c = -c
-			c >>= cdfRate
-			c = a - c
-		}*/
-		cdf[i] = uint16(a + ((b - a) >> cdfRate))
-	}
-}
 
 func (coder Coder16) AdaptiveCoder() Model {
 	out := make(chan []Symbol, BUFFER_CHAN_SIZE)
@@ -422,7 +310,7 @@ func (coder Coder16) FilteredAdaptivePredictiveBitCoder() Model {
 	return Model{Input: out}
 }
 
-func (coder Coder16) FilteredAdaptiveCoder(newCDF func(size int) *CDF) Model {
+func (coder Coder16) FilteredAdaptiveCoder(newCDF func(size int) *CDF16) Model {
 	out := make(chan []Symbol, BUFFER_CHAN_SIZE)
 
 	go func() {
@@ -447,7 +335,7 @@ func (coder Coder16) FilteredAdaptiveCoder(newCDF func(size int) *CDF) Model {
 		close(out)
 	}()
 
-	return Model{Input: out, Fixed: cdfFixed}
+	return Model{Input: out, Fixed: CDF16Fixed}
 }
 
 func (decoder Coder16) AdaptiveDecoder() Model {
@@ -702,7 +590,7 @@ func (decoder Coder16) FilteredAdaptivePredictiveBitDecoder() Model {
 	return Model{Scale: uint32(scale), Output: lookup}
 }
 
-func (decoder Coder16) FilteredAdaptiveDecoder(newCDF func(size int) *CDF) Model {
+func (decoder Coder16) FilteredAdaptiveDecoder(newCDF func(size int) *CDF16) Model {
 	cdf := newCDF(int(decoder.Alphabit))
 
 	lookup := func(code uint16) Symbol {
@@ -724,7 +612,7 @@ func (decoder Coder16) FilteredAdaptiveDecoder(newCDF func(size int) *CDF) Model
 		return Symbol{Low: low, High: high}
 	}
 
-	return Model{Fixed: cdfFixed, Output: lookup}
+	return Model{Fixed: CDF16Fixed, Output: lookup}
 }
 
 func (coder Coder16) AdaptiveCoder32() Model32 {
