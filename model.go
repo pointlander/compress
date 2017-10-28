@@ -345,18 +345,18 @@ func (coder Coder16) FilteredAdaptivePredictiveCoder(newCDF func(size int) *Cont
 		cdf := newCDF(int(coder.Alphabit))
 		buffer := [BUFFER_POOL_SIZE]Symbol{}
 
-		current, offset, index, context := buffer[0:BUFFER_SIZE], BUFFER_SIZE, 0, uint16(0)
+		current, offset, index := buffer[0:BUFFER_SIZE], BUFFER_SIZE, 0
 		for input := range coder.Input {
 			for _, s := range input {
-				current[index], index = Symbol{Low: cdf.CDF[context][s], High: cdf.CDF[context][s+1]}, index+1
+				model := cdf.Model()
+				current[index], index = Symbol{Low: model[s], High: model[s+1]}, index+1
 				if index == BUFFER_SIZE {
 					out <- current
 					next := offset + BUFFER_SIZE
 					current, offset, index = buffer[offset:next], next&BUFFER_POOL_SIZE_MASK, 0
 				}
 
-				cdf.Update(int(context), int(s))
-				context = (context&0xFF)<<8 | s
+				cdf.Update(s)
 			}
 		}
 
@@ -645,17 +645,17 @@ func (decoder Coder16) FilteredAdaptiveDecoder(newCDF func(size int) *CDF16) Mod
 }
 
 func (decoder Coder16) FilteredAdaptivePredictiveDecoder(newCDF func(size int) *ContextCDF16) Model {
-	cdf, context := newCDF(int(decoder.Alphabit)), uint16(0)
+	cdf := newCDF(int(decoder.Alphabit))
 
 	lookup := func(code uint16) Symbol {
 		low, high, done := uint16(0), uint16(0), false
-		for s := 1; s < len(cdf.CDF[context]); s++ {
-			if code < cdf.CDF[context][s] {
-				symbol := s - 1
-				low, high, done = cdf.CDF[context][s-1], cdf.CDF[context][s], decoder.Output(uint16(symbol))
+		model := cdf.Model()
+		for s := 1; s < len(model); s++ {
+			if code < model[s] {
+				symbol := uint16(s - 1)
+				low, high, done = model[s-1], model[s], decoder.Output(symbol)
 
-				cdf.Update(int(context), symbol)
-				context = (context&0xFF)<<8 | uint16(symbol)
+				cdf.Update(symbol)
 				break
 			}
 		}

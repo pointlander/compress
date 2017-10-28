@@ -74,6 +74,87 @@ func Entropy(input []byte) float64 {
 	return -entropy
 }
 
+type Coder16Configuration struct {
+	Name       string
+	Compress   func(coder *compress.Coder16, buffer *bytes.Buffer)
+	Uncompress func(coder *compress.Coder16, buffer *bytes.Buffer)
+}
+
+var coder16Configurations = [...]Coder16Configuration{
+	{
+		Name: "adaptive coder 16",
+		Compress: func(coder *compress.Coder16, buffer *bytes.Buffer) {
+			coder.AdaptiveCoder().Code(buffer)
+		},
+		Uncompress: func(coder *compress.Coder16, buffer *bytes.Buffer) {
+			coder.AdaptiveDecoder().Decode(buffer)
+		},
+	},
+	{
+		Name: "adaptive predictive coder 16",
+		Compress: func(coder *compress.Coder16, buffer *bytes.Buffer) {
+			coder.AdaptivePredictiveCoder().Code(buffer)
+		},
+		Uncompress: func(coder *compress.Coder16, buffer *bytes.Buffer) {
+			coder.AdaptivePredictiveDecoder().Decode(buffer)
+		},
+	},
+	{
+		Name: "adaptive bit coder 16",
+		Compress: func(coder *compress.Coder16, buffer *bytes.Buffer) {
+			coder.AdaptiveBitCoder().Code(buffer)
+		},
+		Uncompress: func(coder *compress.Coder16, buffer *bytes.Buffer) {
+			coder.AdaptiveBitDecoder().Decode(buffer)
+		},
+	},
+	{
+		Name: "adaptive predictive bit coder 16",
+		Compress: func(coder *compress.Coder16, buffer *bytes.Buffer) {
+			coder.AdaptivePredictiveBitCoder().Code(buffer)
+		},
+		Uncompress: func(coder *compress.Coder16, buffer *bytes.Buffer) {
+			coder.AdaptivePredictiveBitDecoder().Decode(buffer)
+		},
+	},
+	{
+		Name: "filtered adaptive bit coder 16",
+		Compress: func(coder *compress.Coder16, buffer *bytes.Buffer) {
+			coder.FilteredAdaptiveBitCoder().Code(buffer)
+		},
+		Uncompress: func(coder *compress.Coder16, buffer *bytes.Buffer) {
+			coder.FilteredAdaptiveBitDecoder().Decode(buffer)
+		},
+	},
+	{
+		Name: "filtered adaptive predictive bit coder 16",
+		Compress: func(coder *compress.Coder16, buffer *bytes.Buffer) {
+			coder.FilteredAdaptivePredictiveBitCoder().Code(buffer)
+		},
+		Uncompress: func(coder *compress.Coder16, buffer *bytes.Buffer) {
+			coder.FilteredAdaptivePredictiveBitDecoder().Decode(buffer)
+		},
+	},
+	{
+		Name: "filtered adaptive coder 16",
+		Compress: func(coder *compress.Coder16, buffer *bytes.Buffer) {
+			coder.FilteredAdaptiveCoder(compress.NewCDF16).Code(buffer)
+		},
+		Uncompress: func(coder *compress.Coder16, buffer *bytes.Buffer) {
+			coder.FilteredAdaptiveDecoder(compress.NewCDF16).Decode(buffer)
+		},
+	},
+	{
+		Name: "filtered adaptive predictive coder 16",
+		Compress: func(coder *compress.Coder16, buffer *bytes.Buffer) {
+			coder.FilteredAdaptivePredictiveCoder(compress.NewContextCDF16).Code(buffer)
+		},
+		Uncompress: func(coder *compress.Coder16, buffer *bytes.Buffer) {
+			coder.FilteredAdaptivePredictiveDecoder(compress.NewContextCDF16).Decode(buffer)
+		},
+	},
+}
+
 type Configuration struct {
 	Name       string
 	Compress   func(in chan []byte, buffer *bytes.Buffer)
@@ -82,7 +163,7 @@ type Configuration struct {
 
 var configurations = [...]Configuration{
 	{
-		Name: "adaptive coder",
+		Name: "burrows-wheeler adaptive coder 16",
 		Compress: func(in chan []byte, buffer *bytes.Buffer) {
 			compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontRunLengthCoder().AdaptiveCoder().Code(buffer)
 		},
@@ -91,7 +172,7 @@ var configurations = [...]Configuration{
 		},
 	},
 	{
-		Name: "adaptive predictive coder",
+		Name: "burrows-wheeler adaptive predictive coder 16",
 		Compress: func(in chan []byte, buffer *bytes.Buffer) {
 			compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontRunLengthCoder().AdaptivePredictiveCoder().Code(buffer)
 		},
@@ -100,7 +181,7 @@ var configurations = [...]Configuration{
 		},
 	},
 	{
-		Name: "adaptive bit coder",
+		Name: "burrows-wheeler adaptive bit coder 16",
 		Compress: func(in chan []byte, buffer *bytes.Buffer) {
 			compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontCoder().AdaptiveBitCoder().Code(buffer)
 		},
@@ -109,7 +190,7 @@ var configurations = [...]Configuration{
 		},
 	},
 	{
-		Name: "adaptive predictive bit coder",
+		Name: "burrows-wheeler adaptive predictive bit coder 16",
 		Compress: func(in chan []byte, buffer *bytes.Buffer) {
 			compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontCoder().AdaptivePredictiveBitCoder().Code(buffer)
 		},
@@ -118,7 +199,7 @@ var configurations = [...]Configuration{
 		},
 	},
 	{
-		Name: "filtered adaptive bit coder",
+		Name: "burrows-wheeler filtered adaptive bit coder 16",
 		Compress: func(in chan []byte, buffer *bytes.Buffer) {
 			compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontCoder().FilteredAdaptiveBitCoder().Code(buffer)
 		},
@@ -127,7 +208,7 @@ var configurations = [...]Configuration{
 		},
 	},
 	{
-		Name: "filtered adaptive predictive bit coder",
+		Name: "burrows-wheeler filtered adaptive predictive bit coder 16",
 		Compress: func(in chan []byte, buffer *bytes.Buffer) {
 			compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontCoder().FilteredAdaptivePredictiveBitCoder().Code(buffer)
 		},
@@ -136,7 +217,7 @@ var configurations = [...]Configuration{
 		},
 	},
 	{
-		Name: "filtered adaptive coder",
+		Name: "burrows-wheeler filtered adaptive coder 16",
 		Compress: func(in chan []byte, buffer *bytes.Buffer) {
 			compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontCoder().FilteredAdaptiveCoder(compress.NewCDF16).Code(buffer)
 		},
@@ -145,7 +226,7 @@ var configurations = [...]Configuration{
 		},
 	},
 	{
-		Name: "filtered adaptive predictive coder",
+		Name: "burrows-wheeler filtered adaptive predictive coder 16",
 		Compress: func(in chan []byte, buffer *bytes.Buffer) {
 			compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontCoder().
 				FilteredAdaptivePredictiveCoder(compress.NewContextCDF16).Code(buffer)
@@ -159,7 +240,7 @@ var configurations = [...]Configuration{
 
 var configurations32 = [...]Configuration{
 	{
-		Name: "adaptive coder 32",
+		Name: "burrows-wheeler adaptive coder 32",
 		Compress: func(in chan []byte, buffer *bytes.Buffer) {
 			compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontRunLengthCoder().AdaptiveCoder32().Code(buffer)
 		},
@@ -168,7 +249,7 @@ var configurations32 = [...]Configuration{
 		},
 	},
 	{
-		Name: "adaptive predictive coder 32",
+		Name: "burrows-wheeler adaptive predictive coder 32",
 		Compress: func(in chan []byte, buffer *bytes.Buffer) {
 			compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontRunLengthCoder().AdaptivePredictiveCoder32().Code(buffer)
 		},
@@ -179,6 +260,39 @@ var configurations32 = [...]Configuration{
 }
 
 func Compress(input []byte) {
+	for c := range coder16Configurations {
+		/* compress */
+		start, data := time.Now(), make([]uint16, len(input))
+		for i := range input {
+			data[i] = uint16(input[i])
+		}
+		symbols, buffer := make(chan []uint16, 1), &bytes.Buffer{}
+		symbols <- data
+		close(symbols)
+		coder16Configurations[c].Compress(&compress.Coder16{Alphabit: 256, Input: symbols}, buffer)
+		fmt.Println(coder16Configurations[c].Name)
+		fmt.Printf("compressed=%v\n", buffer.Len())
+		fmt.Printf("ratio=%v\n", float64(buffer.Len())/float64(len(input)))
+		fmt.Println(time.Now().Sub(start).String())
+
+		/* decompress */
+		start = time.Now()
+		out, i := make([]byte, len(input)), 0
+		output := func(symbol uint16) bool {
+			out[i] = byte(symbol)
+			i++
+			return i >= len(data)
+		}
+		coder16Configurations[c].Uncompress(&compress.Coder16{Alphabit: 256, Output: output}, buffer)
+		if bytes.Compare(input, out) != 0 {
+			fmt.Println("decompression didn't work")
+		} else {
+			fmt.Println("decompression worked")
+		}
+		fmt.Println(time.Now().Sub(start).String())
+		fmt.Println()
+	}
+
 	for c := range configurations {
 		/* compress */
 		start, in, data := time.Now(), make(chan []byte, 1), make([]byte, len(input))
@@ -299,7 +413,7 @@ func Test(file string) {
 		data = d
 	}
 
-	fmt.Printf("entropy=%v\n", Entropy(data))
+	fmt.Printf("entropy=%v\n\n", Entropy(data))
 
 	/*symbols, table := &Symbols8{}, [256]uint8{}
 	symbols.Count(data)
