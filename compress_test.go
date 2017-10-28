@@ -252,6 +252,32 @@ func TestFiltered(t *testing.T) {
 		}
 	}
 
+	testFilteredPredictive := func(test string) {
+		t.Log(test, len(test))
+		input := make([]uint16, len(test))
+		testBytes := []byte(test)
+		for i := range testBytes {
+			input[i] = uint16(testBytes[i])
+		}
+		symbols, buffer := make(chan []uint16, 1), &bytes.Buffer{}
+		symbols <- input
+		close(symbols)
+		Coder16{Alphabit: 256, Input: symbols}.FilteredAdaptivePredictiveCoder(NewContextCDF16).Code(buffer)
+		t.Log(buffer.Len())
+
+		out, i := make([]byte, len(test)), 0
+		output := func(symbol uint16) bool {
+			out[i] = byte(symbol)
+			i++
+			return i >= len(test)
+		}
+		Coder16{Alphabit: 256, Output: output}.FilteredAdaptivePredictiveDecoder(NewContextCDF16).Decode(buffer)
+		t.Log(string(out))
+		if string(out) != test {
+			t.Errorf("%v != %v", string(out), test)
+		}
+	}
+
 	d, err := ioutil.ReadFile("bench/alice30.txt")
 	if err != nil {
 		log.Fatal(err)
@@ -260,6 +286,7 @@ func TestFiltered(t *testing.T) {
 
 	for _, test := range tests {
 		testFiltered(test)
+		testFilteredPredictive(test)
 	}
 }
 

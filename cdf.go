@@ -99,3 +99,98 @@ func (c *CDF16) Update(s int) {
 		cdf[i] = uint16(a + ((b - a) >> CDF16Rate))
 	}
 }
+
+type ContextCDF16 struct {
+	CDF    [][]uint16
+	Mixin  [][]uint16
+	Verify bool
+}
+
+func NewContextCDF16(size int) *ContextCDF16 {
+	if size != 256 {
+		panic("size is not 256")
+	}
+	cdf, mixin := make([][]uint16, 65536), make([][]uint16, size)
+
+	for i := range cdf {
+		sum, context := 0, make([]uint16, size+1)
+		for j := range context {
+			context[j] = uint16(sum)
+			sum += 32
+		}
+		cdf[i] = context
+	}
+
+	for i := range mixin {
+		sum, m := 0, make([]uint16, size+1)
+		for j := range m {
+			m[j] = uint16(sum)
+			sum++
+			if j == i {
+				sum += CDF16Scale - size
+			}
+		}
+		mixin[i] = m
+	}
+
+	return &ContextCDF16{
+		CDF:    cdf,
+		Mixin:  mixin,
+		Verify: true,
+	}
+}
+
+func (c *ContextCDF16) Update(context, s int) {
+	cdf, mixin := c.CDF[context], c.Mixin[s]
+	size := len(cdf) - 1
+
+	if c.Verify {
+		for i := 1; i < size; i++ {
+			a, b := int(cdf[i]), int(mixin[i])
+			if a < 0 {
+				panic("a is less than zero")
+			}
+			if b < 0 {
+				panic("b is less than zero")
+			}
+			/*c := (b - a)
+			if c >= 0 {
+				c >>= cdfRate
+				c = a + c
+			} else {
+				c = -c
+				c >>= cdfRate
+				c = a - c
+			}
+			if c < 0 {
+				panic("c is less than zero")
+			}*/
+			cdf[i] = uint16(a + ((b - a) >> CDF16Rate))
+		}
+		if cdf[size] != CDF16Scale {
+			panic("cdf scale is incorrect")
+		}
+		for i := 1; i < len(cdf); i++ {
+			if a, b := cdf[i], cdf[i-1]; a < b {
+				panic(fmt.Sprintf("invalid cdf %v,%v < %v,%v", i, a, i-1, b))
+			} else if a == b {
+				panic(fmt.Sprintf("invalid cdf %v,%v = %v,%v", i, a, i-1, b))
+			}
+		}
+		return
+	}
+
+	for i := 1; i < size; i++ {
+		a, b := int(cdf[i]), int(mixin[i])
+		/*c := (b - a)
+		if c >= 0 {
+			c >>= cdfRate
+			c = a + c
+		} else {
+			c = -c
+			c >>= cdfRate
+			c = a - c
+		}*/
+		cdf[i] = uint16(a + ((b - a) >> CDF16Rate))
+	}
+}

@@ -338,6 +338,35 @@ func (coder Coder16) FilteredAdaptiveCoder(newCDF func(size int) *CDF16) Model {
 	return Model{Input: out, Fixed: CDF16Fixed}
 }
 
+func (coder Coder16) FilteredAdaptivePredictiveCoder(newCDF func(size int) *ContextCDF16) Model {
+	out := make(chan []Symbol, BUFFER_CHAN_SIZE)
+
+	go func() {
+		cdf := newCDF(int(coder.Alphabit))
+		buffer := [BUFFER_POOL_SIZE]Symbol{}
+
+		current, offset, index, context := buffer[0:BUFFER_SIZE], BUFFER_SIZE, 0, uint16(0)
+		for input := range coder.Input {
+			for _, s := range input {
+				current[index], index = Symbol{Low: cdf.CDF[context][s], High: cdf.CDF[context][s+1]}, index+1
+				if index == BUFFER_SIZE {
+					out <- current
+					next := offset + BUFFER_SIZE
+					current, offset, index = buffer[offset:next], next&BUFFER_POOL_SIZE_MASK, 0
+				}
+
+				cdf.Update(int(context), int(s))
+				context = (context&0xFF)<<8 | s
+			}
+		}
+
+		out <- current[:index]
+		close(out)
+	}()
+
+	return Model{Fixed: CDF16Fixed, Input: out}
+}
+
 func (decoder Coder16) AdaptiveDecoder() Model {
 	table, scale := make([]uint16, decoder.Alphabit), uint16(0)
 	for i, _ := range table {
@@ -601,6 +630,32 @@ func (decoder Coder16) FilteredAdaptiveDecoder(newCDF func(size int) *CDF16) Mod
 				low, high, done = cdf.CDF[s-1], cdf.CDF[s], decoder.Output(uint16(symbol))
 
 				cdf.Update(symbol)
+				break
+			}
+		}
+
+		if done {
+			return Symbol{}
+		}
+
+		return Symbol{Low: low, High: high}
+	}
+
+	return Model{Fixed: CDF16Fixed, Output: lookup}
+}
+
+func (decoder Coder16) FilteredAdaptivePredictiveDecoder(newCDF func(size int) *ContextCDF16) Model {
+	cdf, context := newCDF(int(decoder.Alphabit)), uint16(0)
+
+	lookup := func(code uint16) Symbol {
+		low, high, done := uint16(0), uint16(0), false
+		for s := 1; s < len(cdf.CDF[context]); s++ {
+			if code < cdf.CDF[context][s] {
+				symbol := s - 1
+				low, high, done = cdf.CDF[context][s-1], cdf.CDF[context][s], decoder.Output(uint16(symbol))
+
+				cdf.Update(int(context), symbol)
+				context = (context&0xFF)<<8 | uint16(symbol)
 				break
 			}
 		}
