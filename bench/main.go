@@ -22,6 +22,8 @@ import (
 	"github.com/pointlander/compress"
 )
 
+var failed []string
+
 type Symbols8 [256]struct {
 	uint8
 	uint64
@@ -138,19 +140,19 @@ var coder16Configurations = [...]Coder16Configuration{
 	{
 		Name: "filtered adaptive coder 16",
 		Compress: func(coder *compress.Coder16, buffer *bytes.Buffer) {
-			coder.FilteredAdaptiveCoder(compress.NewCDF16).Code(buffer)
+			coder.FilteredAdaptiveCoder(compress.NewCDF16(0, true)).Code(buffer)
 		},
 		Uncompress: func(coder *compress.Coder16, buffer *bytes.Buffer) {
-			coder.FilteredAdaptiveDecoder(compress.NewCDF16).Decode(buffer)
+			coder.FilteredAdaptiveDecoder(compress.NewCDF16(0, true)).Decode(buffer)
 		},
 	},
 	{
 		Name: "filtered adaptive predictive coder 16",
 		Compress: func(coder *compress.Coder16, buffer *bytes.Buffer) {
-			coder.FilteredAdaptivePredictiveCoder(compress.NewContextCDF16).Code(buffer)
+			coder.FilteredAdaptiveCoder(compress.NewCDF16(2, true)).Code(buffer)
 		},
 		Uncompress: func(coder *compress.Coder16, buffer *bytes.Buffer) {
-			coder.FilteredAdaptivePredictiveDecoder(compress.NewContextCDF16).Decode(buffer)
+			coder.FilteredAdaptiveDecoder(compress.NewCDF16(2, true)).Decode(buffer)
 		},
 	},
 }
@@ -219,21 +221,23 @@ var configurations = [...]Configuration{
 	{
 		Name: "burrows-wheeler filtered adaptive coder 16",
 		Compress: func(in chan []byte, buffer *bytes.Buffer) {
-			compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontCoder().FilteredAdaptiveCoder(compress.NewCDF16).Code(buffer)
+			compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontCoder().
+				FilteredAdaptiveCoder(compress.NewCDF16(0, true)).Code(buffer)
 		},
 		Uncompress: func(in chan []byte, buffer *bytes.Buffer) {
-			compress.BijectiveBurrowsWheelerDecoder(in).MoveToFrontDecoder().FilteredAdaptiveDecoder(compress.NewCDF16).Decode(buffer)
+			compress.BijectiveBurrowsWheelerDecoder(in).MoveToFrontDecoder().
+				FilteredAdaptiveDecoder(compress.NewCDF16(0, true)).Decode(buffer)
 		},
 	},
 	{
 		Name: "burrows-wheeler filtered adaptive predictive coder 16",
 		Compress: func(in chan []byte, buffer *bytes.Buffer) {
 			compress.BijectiveBurrowsWheelerCoder(in).MoveToFrontCoder().
-				FilteredAdaptivePredictiveCoder(compress.NewContextCDF16).Code(buffer)
+				FilteredAdaptiveCoder(compress.NewCDF16(2, true)).Code(buffer)
 		},
 		Uncompress: func(in chan []byte, buffer *bytes.Buffer) {
 			compress.BijectiveBurrowsWheelerDecoder(in).MoveToFrontDecoder().
-				FilteredAdaptivePredictiveDecoder(compress.NewContextCDF16).Decode(buffer)
+				FilteredAdaptiveDecoder(compress.NewCDF16(2, true)).Decode(buffer)
 		},
 	},
 }
@@ -286,6 +290,7 @@ func Compress(input []byte) {
 		coder16Configurations[c].Uncompress(&compress.Coder16{Alphabit: 256, Output: output}, buffer)
 		if bytes.Compare(input, out) != 0 {
 			fmt.Println("decompression didn't work")
+			failed = append(failed, coder16Configurations[c].Name)
 		} else {
 			fmt.Println("decompression worked")
 		}
@@ -314,6 +319,7 @@ func Compress(input []byte) {
 		configurations[c].Uncompress(in, buffer)
 		if bytes.Compare(input, uncompressed) != 0 {
 			fmt.Println("decompression didn't work")
+			failed = append(failed, configurations[c].Name)
 		} else {
 			fmt.Println("decompression worked")
 		}
@@ -342,6 +348,7 @@ func Compress(input []byte) {
 	compress.BurrowsWheelerDecoder(in, sentinels).MoveToFrontRunLengthDecoder().AdaptiveDecoder().Decode(buffer)
 	if bytes.Compare(input, uncompressed) != 0 {
 		fmt.Println("decompression didn't work")
+		failed = append(failed, "suffix tree adaptive coder")
 	} else {
 		fmt.Println("decompression worked")
 	}
@@ -371,6 +378,7 @@ func Compress32(input []byte) {
 		configurations32[c].Uncompress(in, buffer)
 		if bytes.Compare(input, uncompressed) != 0 {
 			fmt.Println("decompression didn't work")
+			failed = append(failed, configurations32[c].Name)
 		} else {
 			fmt.Println("decompression worked")
 		}
@@ -444,5 +452,14 @@ func main() {
 		fmt.Printf("./%v\n", file)
 		Test(file)
 		fmt.Printf("\n")
+	}
+
+	if len(failed) > 0 {
+		fmt.Println("decompression failed:")
+		for _, fail := range failed {
+			fmt.Println(fail)
+		}
+	} else {
+		fmt.Println("decompression worked")
 	}
 }

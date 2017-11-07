@@ -8,271 +8,137 @@ const (
 	CDF16Rate  = 5
 )
 
+type Node16 struct {
+	Model    []uint16
+	Children map[uint16]*Node16
+}
+
+func NewNode16(size int) *Node16 {
+	model, children, sum := make([]uint16, size+1), make(map[uint16]*Node16), 0
+	for i := range model {
+		model[i] = uint16(sum)
+		sum += 32
+	}
+	return &Node16{
+		Model:    model,
+		Children: children,
+	}
+}
+
 type CDF16 struct {
-	CDF    []uint16
-	Mixin  [][]uint16
-	Verify bool
+	Size     int
+	MaxDepth int
+	Root     *Node16
+	Context  []uint16
+	First    int
+	Mixin    [][]uint16
+	Verify   bool
 }
 
-func NewCDF16(size int) *CDF16 {
-	if size != 256 {
-		panic("size is not 256")
-	}
-	cdf, mixin := make([]uint16, size+1), make([][]uint16, size)
+type CDF16Maker func(size int) *CDF16
 
-	sum := 0
-	for i := range cdf {
-		cdf[i] = uint16(sum)
-		sum += 32
-	}
-
-	for i := range mixin {
-		sum, m := 0, make([]uint16, size+1)
-		for j := range m {
-			m[j] = uint16(sum)
-			sum++
-			if j == i {
-				sum += CDF16Scale - size
-			}
+func NewCDF16(depth int, verify bool) CDF16Maker {
+	return func(size int) *CDF16 {
+		if size != 256 {
+			panic("size is not 256")
 		}
-		mixin[i] = m
-	}
+		root, mixin := NewNode16(size), make([][]uint16, size)
 
-	return &CDF16{
-		CDF:    cdf,
-		Mixin:  mixin,
-		Verify: true,
+		for i := range mixin {
+			sum, m := 0, make([]uint16, size+1)
+			for j := range m {
+				m[j] = uint16(sum)
+				sum++
+				if j == i {
+					sum += CDF16Scale - size
+				}
+			}
+			mixin[i] = m
+		}
+
+		return &CDF16{
+			Size:    size,
+			Root:    root,
+			Context: make([]uint16, depth),
+			Mixin:   mixin,
+			Verify:  verify,
+		}
 	}
 }
 
-func (c *CDF16) Update(s int) {
-	cdf, mixin := c.CDF, c.Mixin[s]
-	size := len(cdf) - 1
+func (c *CDF16) Model() []uint16 {
+	context := c.Context
+	length := len(context)
+	var lookUp func(n *Node16, current, depth int) *Node16
+	lookUp = func(n *Node16, current, depth int) *Node16 {
+		if depth >= length {
+			return n
+		}
 
-	if c.Verify {
-		for i := 1; i < size; i++ {
-			a, b := int(cdf[i]), int(mixin[i])
-			if a < 0 {
-				panic("a is less than zero")
-			}
-			if b < 0 {
-				panic("b is less than zero")
-			}
-			/*c := (b - a)
-			if c >= 0 {
-				c >>= cdfRate
-				c = a + c
-			} else {
-				c = -c
-				c >>= cdfRate
-				c = a - c
-			}
-			if c < 0 {
-				panic("c is less than zero")
-			}*/
-			cdf[i] = uint16(a + ((b - a) >> CDF16Rate))
+		node := n.Children[context[current]]
+		if node == nil {
+			return n
 		}
-		if cdf[size] != CDF16Scale {
-			panic("cdf scale is incorrect")
+		child := lookUp(node, (current+1)%length, depth+1)
+		if child == nil {
+			return n
 		}
-		for i := 1; i < len(cdf); i++ {
-			if a, b := cdf[i], cdf[i-1]; a < b {
-				panic(fmt.Sprintf("invalid cdf %v,%v < %v,%v", i, a, i-1, b))
-			} else if a == b {
-				panic(fmt.Sprintf("invalid cdf %v,%v = %v,%v", i, a, i-1, b))
-			}
-		}
-		return
+		return child
 	}
 
-	for i := 1; i < size; i++ {
-		a, b := int(cdf[i]), int(mixin[i])
-		/*c := (b - a)
-		if c >= 0 {
-			c >>= cdfRate
-			c = a + c
+	return lookUp(c.Root, c.First, 0).Model
+}
+
+func (c *CDF16) Update(s uint16) {
+	context, first, mixin := c.Context, c.First, c.Mixin[s]
+	length := len(context)
+	var update func(n *Node16, current, depth int)
+	update = func(n *Node16, current, depth int) {
+		model := n.Model
+		size := len(model) - 1
+
+		if c.Verify {
+			for i := 1; i < size; i++ {
+				a, b := int(model[i]), int(mixin[i])
+				if a < 0 {
+					panic("a is less than zero")
+				}
+				if b < 0 {
+					panic("b is less than zero")
+				}
+				model[i] = uint16(a + ((b - a) >> CDF16Rate))
+			}
+			if model[size] != CDF16Scale {
+				panic("cdf scale is incorrect")
+			}
+			for i := 1; i < len(model); i++ {
+				if a, b := model[i], model[i-1]; a < b {
+					panic(fmt.Sprintf("invalid cdf %v,%v < %v,%v", i, a, i-1, b))
+				} else if a == b {
+					panic(fmt.Sprintf("invalid cdf %v,%v = %v,%v", i, a, i-1, b))
+				}
+			}
 		} else {
-			c = -c
-			c >>= cdfRate
-			c = a - c
-		}*/
-		cdf[i] = uint16(a + ((b - a) >> CDF16Rate))
-	}
-}
-
-type ContextCDF16 struct {
-	Size    int
-	Root    []uint16
-	CDF     [][]uint16
-	Context []uint16
-	First   int
-	Mixin   [][]uint16
-	Verify  bool
-}
-
-func NewContextCDF16(size int) *ContextCDF16 {
-	if size != 256 {
-		panic("size is not 256")
-	}
-	root, cdf, mixin := make([]uint16, size+1), make([][]uint16, 65536), make([][]uint16, size)
-
-	sum := 0
-	for i := range root {
-		root[i] = uint16(sum)
-		sum += 32
-	}
-
-	for i := range mixin {
-		sum, m := 0, make([]uint16, size+1)
-		for j := range m {
-			m[j] = uint16(sum)
-			sum++
-			if j == i {
-				sum += CDF16Scale - size
-			}
-		}
-		mixin[i] = m
-	}
-
-	return &ContextCDF16{
-		Size:    size,
-		Root:    root,
-		CDF:     cdf,
-		Context: make([]uint16, 2),
-		Mixin:   mixin,
-		Verify:  true,
-	}
-}
-
-func (c *ContextCDF16) Model() []uint16 {
-	ctx, first := c.Context, c.First
-	length, context := len(ctx), uint16(ctx[first])
-	for i := (first + 1) % length; i != first; i = (i + 1) % length {
-		context = context<<8 | ctx[i]
-	}
-
-	model := c.CDF[context]
-	if model == nil {
-		model = c.Root
-	}
-
-	return model
-}
-
-func (c *ContextCDF16) Update(s uint16) {
-	ctx, first := c.Context, c.First
-	length, context := len(ctx), uint16(ctx[first])
-	for i := (first + 1) % length; i != first; i = (i + 1) % length {
-		context = context<<8 | ctx[i]
-	}
-
-	size, root, cdf, mixin := c.Size, c.Root, c.CDF[context], c.Mixin[s]
-	if cdf == nil {
-		cdf = make([]uint16, size+1)
-		sum := 0
-		for i := range cdf {
-			cdf[i] = uint16(sum)
-			sum += 32
-		}
-		c.CDF[context] = cdf
-	}
-
-	ctx[first], c.First = s, (first+1)%length
-
-	if c.Verify {
-		for i := 1; i < size; i++ {
-			a, b := int(root[i]), int(mixin[i])
-			if a < 0 {
-				panic("a is less than zero")
-			}
-			if b < 0 {
-				panic("b is less than zero")
-			}
-			/*c := (b - a)
-			if c >= 0 {
-				c >>= cdfRate
-				c = a + c
-			} else {
-				c = -c
-				c >>= cdfRate
-				c = a - c
-			}
-			if c < 0 {
-				panic("c is less than zero")
-			}*/
-			root[i] = uint16(a + ((b - a) >> CDF16Rate))
-		}
-		if root[size] != CDF16Scale {
-			panic("cdf scale is incorrect")
-		}
-		for i := 1; i < len(root); i++ {
-			if a, b := root[i], root[i-1]; a < b {
-				panic(fmt.Sprintf("invalid cdf %v,%v < %v,%v", i, a, i-1, b))
-			} else if a == b {
-				panic(fmt.Sprintf("invalid cdf %v,%v = %v,%v", i, a, i-1, b))
+			for i := 1; i < size; i++ {
+				a, b := int(model[i]), int(mixin[i])
+				model[i] = uint16(a + ((b - a) >> CDF16Rate))
 			}
 		}
 
-		for i := 1; i < size; i++ {
-			a, b := int(cdf[i]), int(mixin[i])
-			if a < 0 {
-				panic("a is less than zero")
-			}
-			if b < 0 {
-				panic("b is less than zero")
-			}
-			/*c := (b - a)
-			if c >= 0 {
-				c >>= cdfRate
-				c = a + c
-			} else {
-				c = -c
-				c >>= cdfRate
-				c = a - c
-			}
-			if c < 0 {
-				panic("c is less than zero")
-			}*/
-			cdf[i] = uint16(a + ((b - a) >> CDF16Rate))
+		if depth >= length {
+			return
 		}
-		if cdf[size] != CDF16Scale {
-			panic("cdf scale is incorrect")
+
+		node := n.Children[context[current]]
+		if node == nil {
+			node = NewNode16(size)
+			n.Children[context[current]] = node
 		}
-		for i := 1; i < len(cdf); i++ {
-			if a, b := cdf[i], cdf[i-1]; a < b {
-				panic(fmt.Sprintf("invalid cdf %v,%v < %v,%v", i, a, i-1, b))
-			} else if a == b {
-				panic(fmt.Sprintf("invalid cdf %v,%v = %v,%v", i, a, i-1, b))
-			}
-		}
-		return
+		update(node, (current+1)%length, depth+1)
 	}
 
-	for i := 1; i < size; i++ {
-		a, b := int(root[i]), int(mixin[i])
-		/*c := (b - a)
-		if c >= 0 {
-			c >>= cdfRate
-			c = a + c
-		} else {
-			c = -c
-			c >>= cdfRate
-			c = a - c
-		}*/
-		root[i] = uint16(a + ((b - a) >> CDF16Rate))
-	}
-
-	for i := 1; i < size; i++ {
-		a, b := int(cdf[i]), int(mixin[i])
-		/*c := (b - a)
-		if c >= 0 {
-			c >>= cdfRate
-			c = a + c
-		} else {
-			c = -c
-			c >>= cdfRate
-			c = a - c
-		}*/
-		cdf[i] = uint16(a + ((b - a) >> CDF16Rate))
+	update(c.Root, first, 0)
+	if length > 0 {
+		context[first], c.First = s, (first+1)%length
 	}
 }

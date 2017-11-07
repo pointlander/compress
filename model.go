@@ -310,35 +310,7 @@ func (coder Coder16) FilteredAdaptivePredictiveBitCoder() Model {
 	return Model{Input: out}
 }
 
-func (coder Coder16) FilteredAdaptiveCoder(newCDF func(size int) *CDF16) Model {
-	out := make(chan []Symbol, BUFFER_CHAN_SIZE)
-
-	go func() {
-		cdf := newCDF(int(coder.Alphabit))
-		buffer := [BUFFER_POOL_SIZE]Symbol{}
-
-		current, offset, index := buffer[0:BUFFER_SIZE], BUFFER_SIZE, 0
-		for input := range coder.Input {
-			for _, s := range input {
-				current[index], index = Symbol{Low: cdf.CDF[s], High: cdf.CDF[s+1]}, index+1
-				if index == BUFFER_SIZE {
-					out <- current
-					next := offset + BUFFER_SIZE
-					current, offset, index = buffer[offset:next], next&BUFFER_POOL_SIZE_MASK, 0
-				}
-
-				cdf.Update(int(s))
-			}
-		}
-
-		out <- current[:index]
-		close(out)
-	}()
-
-	return Model{Input: out, Fixed: CDF16Fixed}
-}
-
-func (coder Coder16) FilteredAdaptivePredictiveCoder(newCDF func(size int) *ContextCDF16) Model {
+func (coder Coder16) FilteredAdaptiveCoder(newCDF CDF16Maker) Model {
 	out := make(chan []Symbol, BUFFER_CHAN_SIZE)
 
 	go func() {
@@ -619,32 +591,7 @@ func (decoder Coder16) FilteredAdaptivePredictiveBitDecoder() Model {
 	return Model{Scale: uint32(scale), Output: lookup}
 }
 
-func (decoder Coder16) FilteredAdaptiveDecoder(newCDF func(size int) *CDF16) Model {
-	cdf := newCDF(int(decoder.Alphabit))
-
-	lookup := func(code uint16) Symbol {
-		low, high, done := uint16(0), uint16(0), false
-		for s := 1; s < len(cdf.CDF); s++ {
-			if code < cdf.CDF[s] {
-				symbol := s - 1
-				low, high, done = cdf.CDF[s-1], cdf.CDF[s], decoder.Output(uint16(symbol))
-
-				cdf.Update(symbol)
-				break
-			}
-		}
-
-		if done {
-			return Symbol{}
-		}
-
-		return Symbol{Low: low, High: high}
-	}
-
-	return Model{Fixed: CDF16Fixed, Output: lookup}
-}
-
-func (decoder Coder16) FilteredAdaptivePredictiveDecoder(newCDF func(size int) *ContextCDF16) Model {
+func (decoder Coder16) FilteredAdaptiveDecoder(newCDF CDF16Maker) Model {
 	cdf := newCDF(int(decoder.Alphabit))
 
 	lookup := func(code uint16) Symbol {
