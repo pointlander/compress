@@ -226,7 +226,7 @@ func TestCode32(t *testing.T) {
 }
 
 func TestFiltered(t *testing.T) {
-	testFiltered := func(test string) {
+	testFiltered := func(test string, depth int) {
 		t.Log(test, len(test))
 		input := make([]uint16, len(test))
 		testBytes := []byte(test)
@@ -236,7 +236,7 @@ func TestFiltered(t *testing.T) {
 		symbols, buffer := make(chan []uint16, 1), &bytes.Buffer{}
 		symbols <- input
 		close(symbols)
-		Coder16{Alphabit: 256, Input: symbols}.FilteredAdaptiveCoder(NewCDF16(0, true)).Code(buffer)
+		Coder16{Alphabit: 256, Input: symbols}.FilteredAdaptiveCoder(NewCDF16(depth, true)).Code(buffer)
 		t.Log(buffer.Len())
 
 		out, i := make([]byte, len(test)), 0
@@ -245,33 +245,7 @@ func TestFiltered(t *testing.T) {
 			i++
 			return i >= len(test)
 		}
-		Coder16{Alphabit: 256, Output: output}.FilteredAdaptiveDecoder(NewCDF16(0, true)).Decode(buffer)
-		t.Log(string(out))
-		if string(out) != test {
-			t.Errorf("%v != %v", string(out), test)
-		}
-	}
-
-	testFilteredPredictive := func(test string) {
-		t.Log(test, len(test))
-		input := make([]uint16, len(test))
-		testBytes := []byte(test)
-		for i := range testBytes {
-			input[i] = uint16(testBytes[i])
-		}
-		symbols, buffer := make(chan []uint16, 1), &bytes.Buffer{}
-		symbols <- input
-		close(symbols)
-		Coder16{Alphabit: 256, Input: symbols}.FilteredAdaptiveCoder(NewCDF16(2, true)).Code(buffer)
-		t.Log(buffer.Len())
-
-		out, i := make([]byte, len(test)), 0
-		output := func(symbol uint16) bool {
-			out[i] = byte(symbol)
-			i++
-			return i >= len(test)
-		}
-		Coder16{Alphabit: 256, Output: output}.FilteredAdaptiveDecoder(NewCDF16(2, true)).Decode(buffer)
+		Coder16{Alphabit: 256, Output: output}.FilteredAdaptiveDecoder(NewCDF16(depth, true)).Decode(buffer)
 		t.Log(string(out))
 		if string(out) != test {
 			t.Errorf("%v != %v", string(out), test)
@@ -285,8 +259,9 @@ func TestFiltered(t *testing.T) {
 	tests := append(TESTS[:], string(d))
 
 	for _, test := range tests {
-		testFiltered(test)
-		testFilteredPredictive(test)
+		for i := 0; i < 3; i++ {
+			testFiltered(test, i)
+		}
 	}
 }
 
