@@ -169,25 +169,48 @@ func (model Model32) Code(out io.Writer) int {
 
 	var low, high uint32 = 0, 0xffffffff
 	var underflow uint32
+	if fixed := model.Fixed; fixed > 0 {
+		for current := range model.Input {
+			for _, s := range current {
+				hl := uint64(high-low) + 1
+				low, high = low+uint32((hl*uint64(s.Low))>>fixed), low+uint32(((hl*uint64(s.High))>>fixed)-1)
 
-	for current := range model.Input {
-		for _, s := range current {
-			hl, scale := uint64(high-low)+1, uint64(s.Scale)
-			low, high = low+uint32((hl*uint64(s.Low))/scale), low+uint32((hl*uint64(s.High))/scale-1)
-
-			for {
-				if low&0x80000000 == high&0x80000000 {
-					output(high & 0x80000000)
-					for underflow > 0 {
-						output(^high & 0x80000000)
-						underflow--
+				for {
+					if low&0x80000000 == high&0x80000000 {
+						output(high & 0x80000000)
+						for underflow > 0 {
+							output(^high & 0x80000000)
+							underflow--
+						}
+					} else if low&0x40000000 != 0 && high&0x40000000 == 0 {
+						low, high, underflow = low&0x3fffffff, high|0x40000000, underflow+1
+					} else {
+						break
 					}
-				} else if low&0x40000000 != 0 && high&0x40000000 == 0 {
-					low, high, underflow = low&0x3fffffff, high|0x40000000, underflow+1
-				} else {
-					break
+					low, high = low<<1, (high<<1)|1
 				}
-				low, high = low<<1, (high<<1)|1
+			}
+		}
+	} else {
+		for current := range model.Input {
+			for _, s := range current {
+				hl, scale := uint64(high-low)+1, uint64(s.Scale)
+				low, high = low+uint32((hl*uint64(s.Low))/scale), low+uint32((hl*uint64(s.High))/scale-1)
+
+				for {
+					if low&0x80000000 == high&0x80000000 {
+						output(high & 0x80000000)
+						for underflow > 0 {
+							output(^high & 0x80000000)
+							underflow--
+						}
+					} else if low&0x40000000 != 0 && high&0x40000000 == 0 {
+						low, high, underflow = low&0x3fffffff, high|0x40000000, underflow+1
+					} else {
+						break
+					}
+					low, high = low<<1, (high<<1)|1
+				}
 			}
 		}
 	}
@@ -230,23 +253,45 @@ func (model Model32) Decode(in io.Reader) {
 	var low, high uint32 = 0, 0xffffffff
 	hl := uint64(high-low) + 1
 
-	s := model.Output(uint32(((uint64(code-low)+1)*model.Scale - 1) / hl))
-	for s.High != 0 {
-		low, high = low+uint32((hl*uint64(s.Low))/model.Scale), low+uint32((hl*uint64(s.High))/model.Scale-1)
+	if fixed := model.Fixed; fixed > 0 {
+		s := model.Output(uint32((((uint64(code-low) + 1) << fixed) - 1) / hl))
+		for s.High != 0 {
+			low, high = low+uint32((hl*uint64(s.Low))>>fixed), low+uint32(((hl*uint64(s.High))>>fixed)-1)
 
-		for {
-			if low&0x80000000 == high&0x80000000 {
+			for {
+				if low&0x80000000 == high&0x80000000 {
 
-			} else if low&0x40000000 != 0 && high&0x40000000 == 0 {
-				low, high, code = low&0x3fffffff, high|0x40000000, code^0x40000000
-			} else {
-				hl, model.Scale = uint64(high-low)+1, uint64(s.Scale)
-				break
+				} else if low&0x40000000 != 0 && high&0x40000000 == 0 {
+					low, high, code = low&0x3fffffff, high|0x40000000, code^0x40000000
+				} else {
+					hl = uint64(high-low) + 1
+					break
+				}
+				input()
+				low, high = low<<1, (high<<1)|1
 			}
-			input()
-			low, high = low<<1, (high<<1)|1
-		}
 
-		s = model.Output(uint32(((uint64(code-low)+1)*model.Scale - 1) / hl))
+			s = model.Output(uint32((((uint64(code-low) + 1) << fixed) - 1) / hl))
+		}
+	} else {
+		s := model.Output(uint32(((uint64(code-low)+1)*model.Scale - 1) / hl))
+		for s.High != 0 {
+			low, high = low+uint32((hl*uint64(s.Low))/model.Scale), low+uint32((hl*uint64(s.High))/model.Scale-1)
+
+			for {
+				if low&0x80000000 == high&0x80000000 {
+
+				} else if low&0x40000000 != 0 && high&0x40000000 == 0 {
+					low, high, code = low&0x3fffffff, high|0x40000000, code^0x40000000
+				} else {
+					hl, model.Scale = uint64(high-low)+1, uint64(s.Scale)
+					break
+				}
+				input()
+				low, high = low<<1, (high<<1)|1
+			}
+
+			s = model.Output(uint32(((uint64(code-low)+1)*model.Scale - 1) / hl))
+		}
 	}
 }
