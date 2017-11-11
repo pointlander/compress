@@ -6,6 +6,8 @@ package compress
 
 import (
 	"bytes"
+	"io/ioutil"
+	"log"
 	/*"fmt"*/
 	"strconv"
 	"testing"
@@ -176,6 +178,53 @@ func TestCode16(t *testing.T) {
 	}
 }
 
+func TestCode16Fixed(t *testing.T) {
+	const fixed = 0x10
+	test := []byte("GLIB BATES\x00")
+	var table = [256]Symbol{'B': {0, 0, 1},
+		'I':    {0, 1, 2},
+		'L':    {0, 2, 4},
+		' ':    {0, 4, 5},
+		'G':    {0, 5, 6},
+		'A':    {0, 6, 7},
+		'T':    {0, 7, 8},
+		'E':    {0, 8, 9},
+		'S':    {0, 9, 10},
+		'\x00': {0, 10, 11}}
+	in, buffer := make(chan []Symbol), &bytes.Buffer{}
+	go func() {
+		input := make([]Symbol, len(test))
+		for i, s := range test {
+			input[i] = table[s]
+		}
+		in <- input
+		close(in)
+	}()
+	Model{Input: in, Fixed: fixed}.Code(buffer)
+	if compressed := [...]byte{0, 5, 0, 2, 0, 2, 0, 0, 0, 8, 0, 0, 0, 12, 0, 14, 0, 16, 0, 18, 0, 20, 128}; bytes.Compare(compressed[:], buffer.Bytes()) != 0 {
+		t.Errorf("arithmetic coding failed")
+	}
+
+	uncompressed, j := make([]byte, len(test)), 0
+	lookup := func(code uint16) Symbol {
+		for i, symbol := range table {
+			if code >= symbol.Low && code < symbol.High {
+				uncompressed[j], j = byte(i), j+1
+				if i == 0 {
+					return Symbol{}
+				} else {
+					return symbol
+				}
+			}
+		}
+		return Symbol{}
+	}
+	Model{Fixed: fixed, Output: lookup}.Decode(buffer)
+	if bytes.Compare(test, uncompressed) != 0 {
+		t.Errorf("arithmetic decoding failed")
+	}
+}
+
 func TestCode32(t *testing.T) {
 	test := []byte("GLIB BATES\x00")
 	var table = [256]Symbol32{'B': {11, 0, 1},
@@ -220,6 +269,134 @@ func TestCode32(t *testing.T) {
 	Model32{Scale: 11, Output: lookup}.Decode(buffer)
 	if bytes.Compare(test, uncompressed) != 0 {
 		t.Errorf("arithmetic decoding failed")
+	}
+}
+
+func TestCode32Fixed(t *testing.T) {
+	const fixed = 0x10
+	test := []byte("GLIB BATES\x00")
+	var table = [256]Symbol32{'B': {0, 0, 1},
+		'I':    {0, 1, 2},
+		'L':    {0, 2, 4},
+		' ':    {0, 4, 5},
+		'G':    {0, 5, 6},
+		'A':    {0, 6, 7},
+		'T':    {0, 7, 8},
+		'E':    {0, 8, 9},
+		'S':    {0, 9, 10},
+		'\x00': {0, 10, 11}}
+
+	in, buffer := make(chan []Symbol32), &bytes.Buffer{}
+	go func() {
+		input := make([]Symbol32, len(test))
+		for i, s := range test {
+			input[i] = table[s]
+		}
+		in <- input
+		close(in)
+	}()
+	Model32{Input: in, Fixed: fixed}.Code(buffer)
+	if compressed := [...]byte{0, 5, 0, 2, 0, 2, 0, 0, 0, 8, 0, 0, 0, 12, 0, 14, 0, 16, 0, 18, 0, 20, 128}; bytes.Compare(compressed[:], buffer.Bytes()) != 0 {
+		t.Errorf("arithmetic coding failed")
+	}
+
+	uncompressed, j := make([]byte, len(test)), 0
+	lookup := func(code uint32) Symbol32 {
+		for i, symbol := range table {
+			if code >= symbol.Low && code < symbol.High {
+				uncompressed[j], j = byte(i), j+1
+				if i == 0 {
+					return Symbol32{}
+				} else {
+					return symbol
+				}
+			}
+		}
+		return Symbol32{}
+	}
+	Model32{Fixed: fixed, Output: lookup}.Decode(buffer)
+	if bytes.Compare(test, uncompressed) != 0 {
+		t.Errorf("arithmetic decoding failed")
+	}
+}
+
+func TestFiltered(t *testing.T) {
+	testFiltered := func(test string, depth int) {
+		t.Log(test, len(test))
+		input := make([]uint16, len(test))
+		testBytes := []byte(test)
+		for i := range testBytes {
+			input[i] = uint16(testBytes[i])
+		}
+		symbols, buffer := make(chan []uint16, 1), &bytes.Buffer{}
+		symbols <- input
+		close(symbols)
+		Coder16{Alphabit: 256, Input: symbols}.FilteredAdaptiveCoder(NewCDF16(depth, true)).Code(buffer)
+		t.Log(buffer.Len())
+
+		out, i := make([]byte, len(test)), 0
+		output := func(symbol uint16) bool {
+			out[i] = byte(symbol)
+			i++
+			return i >= len(test)
+		}
+		Coder16{Alphabit: 256, Output: output}.FilteredAdaptiveDecoder(NewCDF16(depth, true)).Decode(buffer)
+		t.Log(string(out))
+		if string(out) != test {
+			t.Errorf("%v != %v", string(out), test)
+		}
+	}
+
+	d, err := ioutil.ReadFile("bench/alice30.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
+	tests := append(TESTS[:], string(d))
+
+	for _, test := range tests {
+		for i := 0; i < 3; i++ {
+			testFiltered(test, i)
+		}
+	}
+}
+
+func TestFiltered32(t *testing.T) {
+	testFiltered := func(test string, depth int) {
+		t.Log(test, len(test))
+		input := make([]uint16, len(test))
+		testBytes := []byte(test)
+		for i := range testBytes {
+			input[i] = uint16(testBytes[i])
+		}
+		symbols, buffer := make(chan []uint16, 1), &bytes.Buffer{}
+		symbols <- input
+		close(symbols)
+		Coder16{Alphabit: 256, Input: symbols}.FilteredAdaptiveCoder32(NewCDF32(depth, true)).Code(buffer)
+		t.Log(buffer.Len())
+
+		out, i := make([]byte, len(test)), 0
+		output := func(symbol uint16) bool {
+			out[i] = byte(symbol)
+			i++
+			return i >= len(test)
+		}
+		Coder16{Alphabit: 256, Output: output}.FilteredAdaptiveDecoder32(NewCDF32(depth, true)).Decode(buffer)
+		t.Log(string(out))
+		if string(out) != test {
+			t.Errorf("%v != %v", string(out), test)
+		}
+	}
+
+	d, err := ioutil.ReadFile("bench/alice30.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
+	tests := append(TESTS[:], string(d))
+
+	for _, test := range tests {
+		for i := 0; i < 3; i++ {
+			testFiltered(test, i)
+		}
 	}
 }
 

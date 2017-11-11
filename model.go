@@ -310,6 +310,35 @@ func (coder Coder16) FilteredAdaptivePredictiveBitCoder() Model {
 	return Model{Input: out}
 }
 
+func (coder Coder16) FilteredAdaptiveCoder(newCDF CDF16Maker) Model {
+	out := make(chan []Symbol, BUFFER_CHAN_SIZE)
+
+	go func() {
+		cdf := newCDF(int(coder.Alphabit))
+		buffer := [BUFFER_POOL_SIZE]Symbol{}
+
+		current, offset, index := buffer[0:BUFFER_SIZE], BUFFER_SIZE, 0
+		for input := range coder.Input {
+			for _, s := range input {
+				model := cdf.Model()
+				current[index], index = Symbol{Low: model[s], High: model[s+1]}, index+1
+				if index == BUFFER_SIZE {
+					out <- current
+					next := offset + BUFFER_SIZE
+					current, offset, index = buffer[offset:next], next&BUFFER_POOL_SIZE_MASK, 0
+				}
+
+				cdf.Update(s)
+			}
+		}
+
+		out <- current[:index]
+		close(out)
+	}()
+
+	return Model{Fixed: CDF16Fixed, Input: out}
+}
+
 func (decoder Coder16) AdaptiveDecoder() Model {
 	table, scale := make([]uint16, decoder.Alphabit), uint16(0)
 	for i, _ := range table {
@@ -562,6 +591,32 @@ func (decoder Coder16) FilteredAdaptivePredictiveBitDecoder() Model {
 	return Model{Scale: uint32(scale), Output: lookup}
 }
 
+func (decoder Coder16) FilteredAdaptiveDecoder(newCDF CDF16Maker) Model {
+	cdf := newCDF(int(decoder.Alphabit))
+
+	lookup := func(code uint16) Symbol {
+		low, high, done := uint16(0), uint16(0), false
+		model := cdf.Model()
+		for s := 1; s < len(model); s++ {
+			if code < model[s] {
+				symbol := uint16(s - 1)
+				low, high, done = model[s-1], model[s], decoder.Output(symbol)
+
+				cdf.Update(symbol)
+				break
+			}
+		}
+
+		if done {
+			return Symbol{}
+		}
+
+		return Symbol{Low: low, High: high}
+	}
+
+	return Model{Fixed: CDF16Fixed, Output: lookup}
+}
+
 func (coder Coder16) AdaptiveCoder32() Model32 {
 	out := make(chan []Symbol32, BUFFER_CHAN_SIZE)
 
@@ -659,6 +714,35 @@ func (coder Coder16) AdaptivePredictiveCoder32() Model32 {
 	return Model32{Input: out}
 }
 
+func (coder Coder16) FilteredAdaptiveCoder32(newCDF CDF32Maker) Model32 {
+	out := make(chan []Symbol32, BUFFER_CHAN_SIZE)
+
+	go func() {
+		cdf := newCDF(int(coder.Alphabit))
+		buffer := [BUFFER_POOL_SIZE]Symbol32{}
+
+		current, offset, index := buffer[0:BUFFER_SIZE], BUFFER_SIZE, 0
+		for input := range coder.Input {
+			for _, s := range input {
+				model := cdf.Model()
+				current[index], index = Symbol32{Low: model[s], High: model[s+1]}, index+1
+				if index == BUFFER_SIZE {
+					out <- current
+					next := offset + BUFFER_SIZE
+					current, offset, index = buffer[offset:next], next&BUFFER_POOL_SIZE_MASK, 0
+				}
+
+				cdf.Update(s)
+			}
+		}
+
+		out <- current[:index]
+		close(out)
+	}()
+
+	return Model32{Fixed: CDF32Fixed, Input: out}
+}
+
 func (decoder Coder16) AdaptiveDecoder32() Model32 {
 	table, scale := make([]uint32, decoder.Alphabit), uint32(decoder.Alphabit)
 	for i, _ := range table {
@@ -736,4 +820,30 @@ func (decoder Coder16) AdaptivePredictiveDecoder32() Model32 {
 	}
 
 	return Model32{Scale: uint64(decoder.Alphabit), Output: lookup}
+}
+
+func (decoder Coder16) FilteredAdaptiveDecoder32(newCDF CDF32Maker) Model32 {
+	cdf := newCDF(int(decoder.Alphabit))
+
+	lookup := func(code uint32) Symbol32 {
+		low, high, done := uint32(0), uint32(0), false
+		model := cdf.Model()
+		for s := 1; s < len(model); s++ {
+			if code < model[s] {
+				symbol := uint16(s - 1)
+				low, high, done = model[s-1], model[s], decoder.Output(symbol)
+
+				cdf.Update(symbol)
+				break
+			}
+		}
+
+		if done {
+			return Symbol32{}
+		}
+
+		return Symbol32{Low: low, High: high}
+	}
+
+	return Model32{Fixed: CDF32Fixed, Output: lookup}
 }
