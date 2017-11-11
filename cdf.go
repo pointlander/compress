@@ -35,13 +35,12 @@ func NewNode16(size int) *Node16 {
 }
 
 type CDF16 struct {
-	Size     int
-	MaxDepth int
-	Root     *Node16
-	Context  []uint16
-	First    int
-	Mixin    [][]uint16
-	Verify   bool
+	Size    int
+	Root    *Node16
+	Context []uint16
+	First   int
+	Mixin   [][]uint16
+	Verify  bool
 }
 
 type CDF16Maker func(size int) *CDF16
@@ -170,13 +169,12 @@ func NewNode32(size int) *Node32 {
 }
 
 type CDF32 struct {
-	Size     int
-	MaxDepth int
-	Root     *Node32
-	Context  []uint16
-	First    int
-	Mixin    [][]uint32
-	Verify   bool
+	Size    int
+	Root    *Node32
+	Context []uint16
+	First   int
+	Mixin   [][]uint32
+	Verify  bool
 }
 
 type CDF32Maker func(size int) *CDF32
