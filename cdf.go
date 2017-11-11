@@ -17,6 +17,11 @@ const (
 	CDF32Rate = 5
 )
 
+type Filtered16 interface {
+	Model() []uint16
+	Update(s uint16)
+}
+
 type Node16 struct {
 	Model    []uint16
 	Children map[uint16]*Node16
@@ -43,10 +48,10 @@ type CDF16 struct {
 	Verify  bool
 }
 
-type CDF16Maker func(size int) *CDF16
+type CDF16Maker func(size int) Filtered16
 
 func NewCDF16(depth int, verify bool) CDF16Maker {
-	return func(size int) *CDF16 {
+	return func(size int) Filtered16 {
 		if size != 256 {
 			panic("size is not 256")
 		}
@@ -151,6 +156,11 @@ func (c *CDF16) Update(s uint16) {
 	}
 }
 
+type Filtered32 interface {
+	Model() []uint32
+	Update(s uint16)
+}
+
 type Node32 struct {
 	Model    []uint32
 	Children map[uint16]*Node32
@@ -177,10 +187,10 @@ type CDF32 struct {
 	Verify  bool
 }
 
-type CDF32Maker func(size int) *CDF32
+type CDF32Maker func(size int) Filtered32
 
 func NewCDF32(depth int, verify bool) CDF32Maker {
-	return func(size int) *CDF32 {
+	return func(size int) Filtered32 {
 		if size != 256 {
 			panic("size is not 256")
 		}
