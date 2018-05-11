@@ -1,6 +1,9 @@
 package compress
 
-import "fmt"
+import (
+	"fmt"
+	"math/rand"
+)
 
 const (
 	// CDF16Fixed is the shift for 16 bit coders
@@ -46,11 +49,16 @@ type CDF16 struct {
 	First   int
 	Mixin   [][]uint16
 	Verify  bool
+	Rate    uint
 }
 
 type CDF16Maker func(size int) Filtered16
 
 func NewCDF16(depth int, verify bool) CDF16Maker {
+	return NewCDF16WithRate(depth, verify, CDF16Rate)
+}
+
+func NewCDF16WithRate(depth int, verify bool, rate uint) CDF16Maker {
 	return func(size int) Filtered16 {
 		if size != 256 {
 			panic("size is not 256")
@@ -75,6 +83,7 @@ func NewCDF16(depth int, verify bool) CDF16Maker {
 			Context: make([]uint16, depth),
 			Mixin:   mixin,
 			Verify:  verify,
+			Rate:    rate,
 		}
 	}
 }
@@ -119,7 +128,7 @@ func (c *CDF16) Update(s uint16) {
 				if b < 0 {
 					panic("b is less than zero")
 				}
-				model[i] = uint16(a + ((b - a) >> CDF16Rate))
+				model[i] = uint16(a + ((b - a) >> c.Rate))
 			}
 			if model[size] != CDF16Scale {
 				panic("cdf scale is incorrect")
@@ -134,7 +143,7 @@ func (c *CDF16) Update(s uint16) {
 		} else {
 			for i := 1; i < size; i++ {
 				a, b := int(model[i]), int(mixin[i])
-				model[i] = uint16(a + ((b - a) >> CDF16Rate))
+				model[i] = uint16(a + ((b - a) >> c.Rate))
 			}
 		}
 
@@ -154,6 +163,54 @@ func (c *CDF16) Update(s uint16) {
 	if length > 0 {
 		context[first], c.First = s, (first+1)%length
 	}
+}
+
+func (c *CDF16) UpdateContext(s uint16) {
+	context, first := c.Context, c.First
+	length := len(context)
+	if length > 0 {
+		context[first], c.First = s, (first+1)%length
+	}
+}
+
+type Meta16 struct {
+	A, B Filtered16
+	*rand.Rand
+}
+
+func NewMeta16(depth int, verify bool) CDF16Maker {
+	makerA := NewCDF16WithRate(depth, verify, 3)
+	makerB := NewCDF16WithRate(depth, verify, 7)
+	return func(size int) Filtered16 {
+		return &Meta16{
+			A:    makerA(size),
+			B:    makerB(size),
+			Rand: rand.New(rand.NewSource(1)),
+		}
+	}
+}
+
+func (m *Meta16) Model() []uint16 {
+	a, b := m.A.Model(), m.B.Model()
+	c := make([]uint16, len(a))
+	for i := range c {
+		a, b := int(a[i]), int(b[i])
+		c[i] = uint16(a + ((b - a) >> 1))
+	}
+	return c
+}
+
+func (m *Meta16) Update(s uint16) {
+	/*x := m.Intn(2)
+	if x == 0 {
+		m.A.Update(s)
+		m.B.(*CDF16).UpdateContext(s)
+	} else {
+		m.A.(*CDF16).UpdateContext(s)
+		m.B.Update(s)
+	}*/
+	m.A.Update(s)
+	m.B.Update(s)
 }
 
 type Filtered32 interface {

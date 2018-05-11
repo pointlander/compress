@@ -156,6 +156,15 @@ var coder16Configurations = [...]Coder16Configuration{
 		},
 	},
 	{
+		Name: "filtered meta adaptive predictive coder 16",
+		Compress: func(coder *compress.Coder16, buffer *bytes.Buffer) {
+			coder.FilteredAdaptiveCoder(compress.NewMeta16(2, true)).Code(buffer)
+		},
+		Uncompress: func(coder *compress.Coder16, buffer *bytes.Buffer) {
+			coder.FilteredAdaptiveDecoder(compress.NewMeta16(2, true)).Decode(buffer)
+		},
+	},
+	{
 		Name: "filtered adaptive predictive coder 32",
 		Compress: func(coder *compress.Coder16, buffer *bytes.Buffer) {
 			coder.FilteredAdaptiveCoder32(compress.NewCDF32(2, true)).Code(buffer)
