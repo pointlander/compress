@@ -20,3 +20,6 @@ http://bijective.dogma.net/compres10.htm
 
 # The Random Compression Challenge Turns Ten
 http://marknelson.us/2012/10/09/the-random-compression-challenge-turns-ten/  
+
+# kanzi
+https://github.com/flanglet/kanzi-go  
