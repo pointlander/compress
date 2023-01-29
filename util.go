@@ -20,3 +20,18 @@ func Mark1Decompress16(input io.Reader, output []byte) {
 	close(channel)
 	BijectiveBurrowsWheelerDecoder(channel).MoveToFrontRunLengthDecoder().AdaptiveDecoder().Decode(input)
 }
+
+func Mark1Compress1(input []byte, output io.Writer) {
+	data, channel := make([]byte, len(input)), make(chan []byte, 1)
+	copy(data, input)
+	channel <- data
+	close(channel)
+	BijectiveBurrowsWheelerCoder(channel).MoveToFrontCoder().FilteredAdaptiveBitCoder().Code(output)
+}
+
+func Mark1Decompress1(input io.Reader, output []byte) {
+	channel := make(chan []byte, 1)
+	channel <- output
+	close(channel)
+	BijectiveBurrowsWheelerDecoder(channel).MoveToFrontDecoder().FilteredAdaptiveBitDecoder().Decode(input)
+}
