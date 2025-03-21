@@ -83,6 +83,78 @@ func (model Model) Code(out io.Writer) int {
 	return count
 }
 
+func (model Model) CodeBit(out io.Writer) int {
+	count := 0
+	var bits [1]byte
+
+	output := func(bit uint16) {
+		count++
+		if bit != 0 {
+			bits[0] = 1
+		} else {
+			bits[0] = 0
+		}
+		out.Write(bits[:])
+	}
+
+	var low, high uint16 = 0, 0xffff
+	var underflow uint32
+	if fixed := model.Fixed; fixed > 0 {
+		for current := range model.Input {
+			for _, s := range current {
+				hl := uint32(high-low) + 1
+				low, high = low+uint16((hl*uint32(s.Low))>>fixed), low+uint16(((hl*uint32(s.High))>>fixed)-1)
+
+				for {
+					if low&0x8000 == high&0x8000 {
+						output(high & 0x8000)
+						for underflow > 0 {
+							output(^high & 0x8000)
+							underflow--
+						}
+					} else if low&0x4000 != 0 && high&0x4000 == 0 {
+						low, high, underflow = low&0x3fff, high|0x4000, underflow+1
+					} else {
+						break
+					}
+					low, high = low<<1, (high<<1)|1
+				}
+			}
+		}
+	} else {
+		for current := range model.Input {
+			for _, s := range current {
+				hl, scale := uint32(high-low)+1, uint32(s.Scale)
+				low, high = low+uint16((hl*uint32(s.Low))/scale), low+uint16((hl*uint32(s.High))/scale-1)
+
+				for {
+					if low&0x8000 == high&0x8000 {
+						output(high & 0x8000)
+						for underflow > 0 {
+							output(^high & 0x8000)
+							underflow--
+						}
+					} else if low&0x4000 != 0 && high&0x4000 == 0 {
+						low, high, underflow = low&0x3fff, high|0x4000, underflow+1
+					} else {
+						break
+					}
+					low, high = low<<1, (high<<1)|1
+				}
+			}
+		}
+	}
+
+	output(low & 0x4000)
+	underflow++
+	for underflow > 0 {
+		output(^low & 0x4000)
+		underflow--
+	}
+
+	return count
+}
+
 func (model Model) Decode(in io.Reader) {
 	var bits [1]byte
 	var mask uint8 = 0x80
